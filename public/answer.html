@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="vi">
+
+<head>
+    <meta charset="utf-8" />
+    <title>Tra cứu thông tin IUH (từ nguồn chính thống)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="preconnect" href="/" />
+    <style>
+        :root {
+            --bg: #0b1220;
+            --card: #0f172a;
+            --muted: #94a3b8;
+            --txt: #e6edf3;
+            --pri: #3b82f6;
+            --ok: #10b981
+        }
+
+        * {
+            box-sizing: border-box
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--txt);
+            font: 16px/1.5 system-ui, Segoe UI, Roboto
+        }
+
+        .wrap {
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 0 16px
+        }
+
+        h1 {
+            font-size: 22px;
+            margin: 0 0 16px
+        }
+
+        .bar {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            margin: 8px 0 16px
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 12px 14px;
+            border: 1px solid #233046;
+            background: #0b1327;
+            color: var(--txt);
+            border-radius: 10px
+        }
+
+        button {
+            padding: 12px 18px;
+            border: 0;
+            border-radius: 10px;
+            background: linear-gradient(90deg, #2563eb, #3b82f6);
+            color: #fff;
+            font-weight: 600;
+            cursor: pointer
+        }
+
+        button[disabled] {
+            opacity: .6;
+            cursor: wait
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid #1e293b;
+            border-radius: 16px;
+            padding: 16px 18px;
+            margin: 12px 0
+        }
+
+        .muted {
+            color: var(--muted)
+        }
+
+        .answer {
+            white-space: pre-wrap
+        }
+
+        .badges {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin: 6px 0
+        }
+
+        .badge {
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 999px;
+            background: #14213a;
+            color: #cbd5e1;
+            border: 1px solid #263043
+        }
+
+        .list {
+            display: grid;
+            gap: 12px
+        }
+
+        a {
+            color: #93c5fd;
+            text-decoration: none
+        }
+
+        a:hover {
+            text-decoration: underline
+        }
+
+        .small {
+            font-size: 13px
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrap">
+        <h1>Tra cứu thông tin từ Fanpage IUH</h1>
+        <div class="bar">
+            <input id="q" type="text" placeholder="Ví dụ: học phí HK2 2024-2025, lịch thi TAĐV…" />
+            <button id="go">Tra cứu</button>
+        </div>
+
+        <div id="hint" class="muted small">
+            Nguồn dữ liệu: các bài viết chính thống đã đồng bộ từ fanpage IUH. Kết quả có kèm đường dẫn để kiểm chứng.
+        </div>
+
+        <div id="result" class="card" hidden>
+            <div class="badges" id="badges"></div>
+            <div class="answer" id="answer"></div>
+        </div>
+
+        <div id="citablock" class="card" hidden>
+            <div class="muted small">Trích dẫn nguồn (nhấp để mở Facebook):</div>
+            <div id="citas" class="list"></div>
+        </div>
+
+        <div id="msg" class="muted small"></div>
+    </div>
+
+    <script src="/assets/answer.js"></script>
+</body>
+
+</html>

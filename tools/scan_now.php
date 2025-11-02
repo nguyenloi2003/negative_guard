@@ -35,16 +35,21 @@ $window    = (int)($argv[1] ?? 30);                       // phút
 $DEBUG     = in_array('--debug', $argv, true) || in_array('-d', $argv, true);
 $threshold = (int)envv('AUTO_RISK_THRESHOLD', 60);
 $doHide    = filter_var(envv('AUTO_ACTION_HIDE', 'false'), FILTER_VALIDATE_BOOLEAN);
-$doReply   = filter_var(envv('AUTO_REPLY_ENABLED', 'false'), FILTER_VALIDATE_BOOLEAN);
-$prefix    = envv('AUTO_REPLY_PREFIX', '[BQT]');
+$doReply   = filter_var(envv('AUTO_REPLY_ENABLED', 'true'), FILTER_VALIDATE_BOOLEAN);
+$prefix    = envv('AUTO_REPLY_PREFIX', '⚠️[BQT]');
 $pageId    = envv('FB_PAGE_ID');
 
-$sinceUnix = time() - $window * 60;
+$sinceUnix = time() - max(0, $window) * 60;
+$noTimeFilter = ($window === 0);
 $out = ['scanned' => 0, 'high_risk' => 0, 'replied' => 0, 'hidden' => 0, 'skipped' => 0, 'posts' => 0];
 
+
 if ($DEBUG) {
-    fwrite(STDERR, "PAGE_ID={$pageId}, window={$window}m, since=" . gmdate('c', $sinceUnix) . PHP_EOL);
+    $sinceStr = $noTimeFilter ? 'NO_TIME_FILTER' : gmdate('c', $sinceUnix);
+    fwrite(STDERR, "PAGE_ID={$pageId}, window={$window}m, since={$sinceStr}\n");
+    fwrite(STDERR, "CFG: doReply=" . ($doReply ? 'true' : 'false') . ", doHide=" . ($doHide ? 'true' : 'false') . ", threshold={$threshold}\n");
 }
+
 
 try {
     // 1) Lấy 25 post mới nhất (không lọc)
@@ -86,43 +91,57 @@ foreach ($posts as $p) {
         if ($DEBUG) fwrite(STDERR, "  chunk comments: " . count($chunk) . PHP_EOL);
 
         foreach ($chunk as $c) {
-            $cid  = $c['id'];
+            $cid  = $c['id'] ?? '';
             $msg  = trim($c['message'] ?? '');
-            $from = $c['from']['id'] ?? '';
-            $ct   = strtotime($c['created_time'] ?? '1970-01-01');
+            $fromId   = $c['from']['id']   ?? '';
+            $fromName = $c['from']['name'] ?? '(unknown)';
+            $ct       = strtotime($c['created_time'] ?? '1970-01-01');
 
-            // lọc theo thời gian
-            if ($ct < $sinceUnix) continue;
-            if ($msg === '')     continue;
+            if (!$cid || $msg === '') continue;
+            if (!$noTimeFilter && $ct < $sinceUnix) continue;
 
-            $isFromPage = ($pageId && $from === $pageId);
+            $isFromPage = ($pageId && $fromId === $pageId);
 
             // nếu đã hành động thì thôi
             $chk = db()->prepare('SELECT 1 FROM auto_actions WHERE object_id=? AND action IN ("replied","hidden") LIMIT 1');
             $chk->execute([$cid]);
             if ($chk->fetchColumn()) {
                 $out['skipped']++;
+                if ($DEBUG) fwrite(STDERR, "      skip: already replied/hidden before\n");
                 continue;
             }
 
             $out['scanned']++;
-            if ($DEBUG) fwrite(STDERR, "    + scan $cid by {$c['from']['name']} @ {$c['created_time']} :: " . mb_substr($msg, 0, 60) . PHP_EOL);
+            if ($DEBUG) {
+                $preview = mb_substr($msg, 0, 80);
+                fwrite(STDERR, "    + scan $cid by {$fromName} @ {$c['created_time']} :: {$preview}\n");
+            }
 
-            $ar   = analyze_text_with_schema($msg);
-            $risk = (int)($ar['overall_risk'] ?? 0);
+            // analyze (try/catch)
+            try {
+                $ar   = analyze_text_with_schema($msg);
+            } catch (Throwable $e) {
+                aa_upsert($cid, 'comment', 'skipped', 0, 'analyze_error:' . substr($e->getMessage(), 0, 120));
+                $out['skipped']++;
+                if ($DEBUG) fwrite(STDERR, "      analyze_error: " . $e->getMessage() . "\n");
+                continue;
+            }
 
-            // luôn log điểm (để UI tổng hợp hiển thị)
+            $risk   = (int)($ar['overall_risk'] ?? 0);
+            $labels = $ar['labels'] ?? [];
+            if ($DEBUG) fwrite(STDERR, "      risk={$risk} labels=" . json_encode($labels, JSON_UNESCAPED_UNICODE) . "\n");
+
+            // log score
             aa_upsert($cid, 'comment', 'score', $risk, 'cli_scan');
 
             if ($risk < $threshold) {
                 aa_upsert($cid, 'comment', 'skipped', $risk, 'under_threshold');
+                if ($DEBUG) fwrite(STDERR, "      skip: under_threshold {$risk}<{$threshold}\n");
                 continue;
             }
-
             $out['high_risk']++;
 
-            // Mẫu reply (nếu bật)
-            $labels = $ar['labels'] ?? [];
+            // chọn template
             if (!empty($labels['scam_phishing'])) {
                 $tpl = "Cảnh báo: Có dấu hiệu mời chào/lừa đảo. Vui lòng cảnh giác, không cung cấp thông tin cá nhân hay chuyển tiền.";
             } elseif (!empty($labels['hate_speech'])) {
@@ -134,18 +153,38 @@ foreach ($posts as $p) {
             }
             $reply = trim($prefix . ' ' . $tpl);
 
-            // Không reply/hide comment của chính Page
-            if (!$isFromPage && $doReply) {
-                fb_comment($cid, $reply);
-                aa_upsert($cid, 'comment', 'replied', $risk, 'cli_scan', $reply);
-                $out['replied']++;
-                usleep(600000);
+            // === TỰ TRẢ LỜI ===
+            if ($isFromPage) {
+                if ($DEBUG) fwrite(STDERR, "      skip reply: fromPage=true (comment của chính Page)\n");
+            } elseif (!$doReply) {
+                if ($DEBUG) fwrite(STDERR, "      skip reply: doReply=false (config)\n");
+            } else {
+                try {
+                    fb_comment($cid, $reply);
+                    aa_upsert($cid, 'comment', 'replied', $risk, 'cli_scan', $reply);
+                    $out['replied']++;
+                    if ($DEBUG) fwrite(STDERR, "      replied OK\n");
+                    usleep(600000);
+                } catch (Throwable $eAct) {
+                    $reason = (strpos($eAct->getMessage(), '1446036') !== false) ? 'spam_blocked' : 'reply_error:' . substr($eAct->getMessage(), 0, 120);
+                    aa_upsert($cid, 'comment', 'skipped', $risk, $reason, $reply);
+                    if ($DEBUG) fwrite(STDERR, "      reply ERROR: " . $eAct->getMessage() . "\n");
+                }
             }
-            if (!$isFromPage && $doHide) {
-                fb_hide_comment($cid, true);
-                aa_upsert($cid, 'comment', 'hidden', $risk, 'cli_scan');
-                $out['hidden']++;
-                usleep(600000);
+            // === ẨN ===
+            if ($isFromPage) {
+                if ($DEBUG && $doHide) fwrite(STDERR, "      skip hide: fromPage=true\n");
+            } elseif ($doHide) {
+                try {
+                    fb_hide_comment($cid, true);
+                    aa_upsert($cid, 'comment', 'hidden', $risk, 'cli_scan');
+                    $out['hidden']++;
+                    if ($DEBUG) fwrite(STDERR, "      hidden OK\n");
+                    usleep(600000);
+                } catch (Throwable $eAct) {
+                    aa_upsert($cid, 'comment', 'skipped', $risk, 'hide_error:' . substr($eAct->getMessage(), 0, 120));
+                    if ($DEBUG) fwrite(STDERR, "      hide ERROR: " . $eAct->getMessage() . "\n");
+                }
             }
         }
 

@@ -1,5 +1,7 @@
 <?php
 // Simple .env loader (không cần composer)
+// file lib/config.php
+
 function env_load($file = __DIR__ . '/../.env')
 {
     if (!file_exists($file)) return;

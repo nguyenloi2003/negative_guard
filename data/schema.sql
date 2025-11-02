@@ -70,3 +70,50 @@ CREATE TABLE IF NOT EXISTS auto_actions (
   KEY idx_created_at (created_at),
   KEY idx_object_type (object_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS kb_sources (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  platform VARCHAR(16) NOT NULL,               -- 'facebook' | 'web'
+  source_name VARCHAR(128) NOT NULL,           -- 'IUH Official'
+  trust_level DECIMAL(3,2) NOT NULL DEFAULT 1.00,
+  url VARCHAR(255),
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS kb_posts (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  source_id INT NOT NULL,
+  fb_post_id VARCHAR(64),                      -- nếu lấy từ FB
+  title VARCHAR(255),
+  message_raw MEDIUMTEXT,
+  message_clean MEDIUMTEXT,
+  topic VARCHAR(64),
+  doc_type VARCHAR(32),                        -- announcement/policy/schedule/faq...
+  permalink_url VARCHAR(255),
+  created_time DATETIME,
+  updated_time DATETIME,
+  trust_level DECIMAL(3,2) NOT NULL DEFAULT 1.00,
+  md5 CHAR(32) NOT NULL,                       -- chống trùng lặp
+  UNIQUE KEY u_fb (fb_post_id),
+  KEY idx_time (created_time),
+  KEY idx_topic (topic),
+  CONSTRAINT fk_kb_posts_source FOREIGN KEY (source_id) REFERENCES kb_sources(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS kb_chunks (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  post_id BIGINT NOT NULL,
+  chunk_idx INT NOT NULL,
+  text MEDIUMTEXT,
+  text_clean MEDIUMTEXT,
+  tokens INT,
+  trust_level DECIMAL(3,2) DEFAULT 1.00,
+  INDEX idx_post (post_id, chunk_idx),
+  FULLTEXT KEY ft_text (text, text_clean),     -- dùng NL search trước, nâng cấp vector sau
+  CONSTRAINT fk_kb_chunks_post FOREIGN KEY (post_id) REFERENCES kb_posts(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE FULLTEXT INDEX ft_chunk ON kb_chunks (text, text_clean);
+
+ANALYZE TABLE kb_posts;
+ANALYZE TABLE kb_chunks;

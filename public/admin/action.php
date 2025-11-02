@@ -1,13 +1,11 @@
 <?php
+// file admin/action.php
+
 require_once __DIR__ . '/../../lib/config.php';
 require_once __DIR__ . '/../../lib/auth.php';
 require_once __DIR__ . '/../../lib/fb_graph.php';
 require_once __DIR__ . '/../../lib/openai_client.php';
 require_once __DIR__ . '/../../lib/db.php';
-
-send_security_headers();
-require_admin();
-header('Content-Type: application/json; charset=utf-8');
 
 // --- CHO PHÉP CLI ---
 $isCli = (php_sapi_name() === 'cli') || defined('CLI_MODE');
@@ -19,7 +17,7 @@ if (!$isCli) {
     require_admin();
 }
 
-// Kiểm tra CSRF: bỏ qua khi chạy CLI
+// Kiểm tra CSRF (bỏ qua khi chạy CLI)
 if (
     !$isCli && (
         $_SERVER['REQUEST_METHOD'] !== 'POST' ||
@@ -86,9 +84,40 @@ try {
                 $id = trim($_POST['id'] ?? '');
                 $hide = ($_POST['hide'] ?? '1') === '1';
                 if ($id === '') throw new Exception('Thiếu id');
-                echo json_encode(fb_hide_comment($id, $hide), JSON_UNESCAPED_UNICODE);
+
+                // 1) Kiểm tra tình trạng hiện tại (tránh gọi thừa)
+                try {
+                    $info = fb_get_comment($id); // fields: is_hidden,...
+                    $curHidden = !empty($info['is_hidden']);
+                    if ($curHidden === $hide) {
+                        echo json_encode(['ok' => true, 'message' => $hide ? 'Đã ẩn sẵn' : 'Đang hiển thị sẵn'], JSON_UNESCAPED_UNICODE);
+                        break;
+                    }
+                } catch (Throwable $e) {
+                    // không chặn, chỉ log nhẹ – vẫn thử ẩn/hiện bên dưới
+                }
+
+                try {
+                    $res = fb_hide_comment($id, $hide);
+                    echo json_encode($res ?: ['ok' => true], JSON_UNESCAPED_UNICODE);
+                } catch (Throwable $e) {
+                    $msg = $e->getMessage();
+
+                    // 2) FB chặn spam: error_subcode 1446036 -> trả về message rõ ràng
+                    if (strpos($msg, '1446036') !== false) {
+                        http_response_code(429);
+                        echo json_encode([
+                            'error' => 'Facebook đang chặn thao tác vì nghi ngờ spam (1446036). Hãy thử lại sau vài phút, giảm tần suất và đa dạng nội dung.',
+                            'code'  => 1446036
+                        ], JSON_UNESCAPED_UNICODE);
+                    } else {
+                        http_response_code(400);
+                        echo json_encode(['error' => 'Facebook: ' . $msg], JSON_UNESCAPED_UNICODE);
+                    }
+                }
                 break;
             }
+
 
         case 'delete_comment': {
                 $id = trim($_POST['id'] ?? '');
@@ -98,31 +127,82 @@ try {
             }
 
         case 'scan_now': {
-                // Quét X phút gần nhất (mặc định 30)
-                $window    = max(5, (int)($_POST['window'] ?? 30));
+                // Quét X phút gần nhất; 0 = không lọc theo thời gian (vét theo post mới nhất)
+                $window    = max(0, (int)($_POST['window'] ?? 30));
                 $threshold = (int) envv('AUTO_RISK_THRESHOLD', 60);
 
                 $doHide  = filter_var(envv('AUTO_ACTION_HIDE',   'true'), FILTER_VALIDATE_BOOLEAN);
                 $doReply = filter_var(envv('AUTO_REPLY_ENABLED', 'true'), FILTER_VALIDATE_BOOLEAN);
                 $prefix  = envv('AUTO_REPLY_PREFIX', '[BQT]');
 
-                $sinceUnix = time() - $window * 60;
-                $pageId    = envv('FB_PAGE_ID');
+                $sinceUnix    = time() - $window * 60;
+                $noTimeFilter = ($window === 0);
+                $pageId       = envv('FB_PAGE_ID');
 
-                $scanRes = ['scanned' => 0, 'high_risk' => 0, 'replied' => 0, 'hidden' => 0, 'skipped' => 0];
+                $scanRes = ['scanned' => 0, 'high_risk' => 0, 'replied' => 0, 'hidden' => 0, 'skipped' => 0, 'errors' => 0];
 
-                // Lấy bài & bình luận
-                $posts = fb_get_page_posts_since($sinceUnix, 20);
-                foreach (($posts['data'] ?? []) as $p) {
-                    $comments = fb_get_post_comments_since($p['id'], $sinceUnix, 50);
-                    foreach (($comments['data'] ?? []) as $c) {
-                        $cid  = $c['id'];
-                        $from = $c['from']['id'] ?? '';
+                // 1) Lấy post
+                try {
+                    if ($noTimeFilter) {
+                        // không truyền since -> lấy post mới nhất
+                        $postsRes = fb_api("/{$pageId}/posts", [
+                            'limit'  => 25,
+                            'fields' => 'id,created_time,permalink_url'
+                        ]);
+                    } else {
+                        $postsRes = fb_get_page_posts_since($sinceUnix, 25);
+                        if (empty($postsRes['data'])) {
+                            // fallback khi không có post trong cửa sổ thời gian
+                            $postsRes = fb_api("/{$pageId}/posts", [
+                                'limit'  => 25,
+                                'fields' => 'id,created_time,permalink_url'
+                            ]);
+                        }
+                    }
+                } catch (Throwable $e) {
+                    http_response_code(400);
+                    echo json_encode(['error' => 'Graph posts: ' . $e->getMessage()], JSON_UNESCAPED_UNICODE);
+                    break;
+                }
+
+                $posts = $postsRes['data'] ?? [];
+                foreach ($posts as $p) {
+                    $pid = $p['id'] ?? '';
+                    if (!$pid) continue;
+
+                    // 2) Lấy comment cho từng post
+                    try {
+                        if ($noTimeFilter) {
+                            $commentsRes = fb_api("/{$pid}/comments", [
+                                'filter' => 'stream',
+                                'limit'  => 100,
+                                'order'  => 'reverse_chronological',
+                                'fields' => 'id,from{id,name},message,created_time,is_hidden,permalink_url'
+                            ]);
+                        } else {
+                            $commentsRes = fb_get_post_comments_since($pid, $sinceUnix, 100);
+                        }
+                    } catch (Throwable $e) {
+                        $scanRes['errors']++;
+                        continue;
+                    }
+
+                    foreach (($commentsRes['data'] ?? []) as $c) {
+                        $cid  = $c['id'] ?? '';
                         $msg  = trim($c['message'] ?? '');
-                        if ($msg === '') continue;
-                        if ($pageId && $from === $pageId) continue; // bỏ comment của chính Page
+                        $from = $c['from']['id'] ?? '';
+                        if (!$cid || $msg === '') continue;
 
-                        // nếu đã reply/hide rồi thì bỏ qua
+                        // Nếu đang có lọc thời gian, bỏ comment cũ
+                        if (!$noTimeFilter) {
+                            $ct = strtotime($c['created_time'] ?? '1970-01-01');
+                            if ($ct < $sinceUnix) continue;
+                        }
+
+                        // Bỏ comment của chính Page
+                        if ($pageId && $from === $pageId) continue;
+
+                        // Đã xử lý trước đó?
                         $chk = db()->prepare('SELECT 1 FROM auto_actions WHERE object_id=? AND action IN ("replied","hidden") LIMIT 1');
                         $chk->execute([$cid]);
                         if ($chk->fetchColumn()) {
@@ -131,14 +211,21 @@ try {
                         }
 
                         $scanRes['scanned']++;
-                        $res  = analyze_text_with_schema($msg);
+
+                        // Phân tích
+                        try {
+                            $res  = analyze_text_with_schema($msg);
+                        } catch (Throwable $e) {
+                            aa_upsert($cid, 'comment', 'skipped', 0, 'analyze_error:' . substr($e->getMessage(), 0, 120));
+                            $scanRes['errors']++;
+                            continue;
+                        }
                         $risk = (int)($res['overall_risk'] ?? 0);
 
-                        // Luôn ghi điểm "score" để trang cảnh báo tổng hợp được
+                        // Luôn ghi điểm "score"
                         aa_upsert($cid, 'comment', 'score', $risk, 'scan_now');
 
                         if ($risk < $threshold) {
-                            // log skipped (tuỳ chọn)
                             aa_upsert($cid, 'comment', 'skipped', $risk, 'under_threshold');
                             continue;
                         }
@@ -158,23 +245,44 @@ try {
                         }
                         $reply = trim($prefix . ' ' . $tpl);
 
+                        // REPLY
                         if ($doReply) {
-                            fb_comment($cid, $reply);
-                            aa_upsert($cid, 'comment', 'replied', $risk, 'scan_now', $reply);
-                            $scanRes['replied']++;
-                            usleep(600000); // 0.6s tránh rate limit
+                            try {
+                                fb_comment($cid, $reply);
+                                aa_upsert($cid, 'comment', 'replied', $risk, 'scan_now', $reply);
+                                $scanRes['replied']++;
+                                usleep(3500000); // 3.5s
+                            } catch (Throwable $eAct) {
+                                $reason = (strpos($eAct->getMessage(), '1446036') !== false)
+                                    ? 'spam_blocked'
+                                    : 'reply_error:' . substr($eAct->getMessage(), 0, 120);
+                                aa_upsert($cid, 'comment', 'skipped', $risk, $reason, $reply);
+                                // nếu spam_blocked, không thử hide tiếp để tránh tệ hơn
+                                if ($reason === 'spam_blocked') continue;
+                            }
                         }
+                        // HIDE
                         if ($doHide) {
-                            fb_hide_comment($cid, true);
-                            aa_upsert($cid, 'comment', 'hidden', $risk, 'scan_now');
-                            $scanRes['hidden']++;
-                            usleep(600000);
+                            try {
+                                fb_hide_comment($cid, true);
+                                aa_upsert($cid, 'comment', 'hidden', $risk, 'scan_now');
+                                $scanRes['hidden']++;
+                                usleep(3500000); // 3.5s
+                            } catch (Throwable $eAct) {
+                                $reason = (strpos($eAct->getMessage(), '1446036') !== false)
+                                    ? 'spam_blocked'
+                                    : 'hide_error:' . substr($eAct->getMessage(), 0, 120);
+                                aa_upsert($cid, 'comment', 'skipped', $risk, $reason);
+                            }
                         }
                     }
                 }
+
                 echo json_encode($scanRes, JSON_UNESCAPED_UNICODE);
                 break;
             }
+
+
 
         case 'analyze_post': {
                 $postId = trim($_POST['id'] ?? '');
@@ -333,6 +441,22 @@ try {
                 echo json_encode($stats, JSON_UNESCAPED_UNICODE);
                 break;
             }
+
+        case 'kb_answer_comment':
+            $id = trim($_POST['id'] ?? '');
+            if (!$id) throw new Exception('Thiếu id');
+            $c = fb_api("/$id", ['fields' => 'message']);
+            $pdo = db();
+            $ans = kb_best_answer_string($pdo, $c['message'] ?? '');
+            if (!$ans['ok']) throw new Exception('KB không tìm thấy câu trả lời phù hợp');
+            $reply = envv('AUTO_REPLY_PREFIX', '[BQT]') . ' ' . $ans['text'];
+            fb_comment($id, $reply);
+            // log
+            $ins = db()->prepare('INSERT IGNORE INTO auto_actions(object_id,object_type,action,risk,reason,response_text) VALUES (?,?,?,?,?,?)');
+            $ins->execute([$id, 'comment', 'replied', 0, 'kb_manual', $reply]);
+            echo json_encode(['ok' => true]);
+            break;
+
 
         default:
             throw new Exception('Hành động không hợp lệ');

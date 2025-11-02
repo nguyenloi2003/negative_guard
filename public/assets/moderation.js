@@ -84,26 +84,34 @@
     });
   });
 
-  // Nút “Quét ngay”
-  const scanBtn  = document.getElementById('scanBtn');
-  const scanText = document.getElementById('scanText');
-  if (scanBtn) scanBtn.addEventListener('click', async () => {
-    const old = scanText ? scanText.textContent : ''; scanBtn.disabled = true;
-    if (scanText) scanText.textContent = 'Đang quét…';
-    try {
-      const fd = new FormData();
-      fd.append('csrf', CSRF);
-      fd.append('action', 'scan_now');
-      fd.append('window', '30');
-      const data = await callAction(fd);
-      alert(`Đã quét: ${data.scanned}\nVượt ngưỡng: ${data.high_risk}\nĐã trả lời: ${data.replied}\nĐã ẩn: ${data.hidden}`);
-      location.reload();
-    } catch (e) {
-      alert('Lỗi quét: ' + e.message);
-      scanBtn.disabled = false;
-      if (scanText) scanText.textContent = old;
-    }
-  });
+  // helper: lấy window phút hiện tại
+function getWindowMinutes() {
+  const el = document.querySelector('input[name="window"]');
+  const v = el ? parseInt(el.value, 10) : NaN;
+  return Number.isFinite(v) ? String(Math.max(0, v)) : '30';
+}
+
+// Nút “Quét ngay”
+const scanBtn  = document.getElementById('scanBtn');
+const scanText = document.getElementById('scanText');
+if (scanBtn) scanBtn.addEventListener('click', async () => {
+  const old = scanText ? scanText.textContent : '';
+  scanBtn.disabled = true;
+  if (scanText) scanText.textContent = 'Đang quét…';
+  try {
+    const fd = new FormData();
+    fd.append('csrf', CSRF);
+    fd.append('action', 'scan_now');
+    fd.append('window', getWindowMinutes());   // <<< dùng giá trị trên form
+    const data = await callAction(fd);
+    alert(`Đã quét: ${data.scanned}\nVượt ngưỡng: ${data.high_risk}\nĐã trả lời: ${data.replied}\nĐã ẩn: ${data.hidden}`);
+    location.reload();
+  } catch (e) {
+    alert('Lỗi quét: ' + e.message);
+    scanBtn.disabled = false;
+    if (scanText) scanText.textContent = old;
+  }
+});
 
   const csrf = (document.querySelector('meta[name="csrf-token"]')||{}).content || '';
 
@@ -122,22 +130,28 @@
     return data || {};
   }
 
-  const scanPostsBtn  = document.getElementById('scanPostsBtn');
-  const scanPostsText = document.getElementById('scanPostsText');
+// Nút “Comment tự động bài viết…”
+const scanPostsBtn  = document.getElementById('scanPostsBtn');
+const scanPostsText = document.getElementById('scanPostsText');
 
-  if (scanPostsBtn) {
-    scanPostsBtn.addEventListener('click', async ()=>{
-      scanPostsBtn.disabled = true;
-      if (scanPostsText) scanPostsText.textContent = 'Đang quét bài viết…';
-      try {
-        const data = await postAction('scan_posts_now', { window: '60' });
-        alert(`Bài viết đã quét: ${data.scanned}\nĐã cảnh báo: ${data.warned}\nBỏ qua: ${data.skipped}\nLỗi: ${data.errors}`);
-        location.reload();
-      } catch (e) {
-        alert('Lỗi quét bài viết: ' + e.message);
-        scanPostsBtn.disabled = false;
-        if (scanPostsText) scanPostsText.textContent = '';
-      }
-    });
-      }
+if (scanPostsBtn) {
+  scanPostsBtn.addEventListener('click', async (ev) => {
+    ev.preventDefault(); // <<< chặn submit form
+    scanPostsBtn.disabled = true;
+    if (scanPostsText) scanPostsText.textContent = 'Đang quét bài viết…';
+    try {
+      const fd = new FormData();
+      fd.append('csrf', CSRF);
+      fd.append('action', 'scan_posts_now');
+      fd.append('window', getWindowMinutes());  // <<< dùng giá trị trên form
+      const data = await callAction(fd);
+      alert(`Bài viết đã quét: ${data.scanned}\nĐã cảnh báo: ${data.warned}\nBỏ qua: ${data.skipped}\nLỗi: ${data.errors}`);
+      location.reload();
+    } catch (e) {
+      alert('Lỗi quét bài viết: ' + e.message);
+      scanPostsBtn.disabled = false;
+      if (scanPostsText) scanPostsText.textContent = '';
+    }
+  });
+}
 })();

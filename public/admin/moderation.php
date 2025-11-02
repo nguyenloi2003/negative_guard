@@ -1,4 +1,6 @@
 <?php
+// file admin/moderation.php
+
 require_once __DIR__ . '/../../lib/config.php';
 require_once __DIR__ . '/../../lib/auth.php';
 require_once __DIR__ . '/../../lib/db.php';
@@ -235,7 +237,7 @@ function risk_level($r)
         <div><strong style="color: red;">Cảnh báo cao</strong></div>
         <nav>
             <a class="badge" href="/admin/dashboard.php">Bảng điều khiển</a>
-            <a class="badge" href="/admin/logout.php">Đăng xuất</a>
+            <a class="badge" href="/logout.php">Đăng xuất</a>
         </nav>
     </header>
 
@@ -259,10 +261,10 @@ function risk_level($r)
             <button class="btn" type="submit">Lọc</button>
 
             <button class="btn btn-primary" id="scanBtn" type="button" title="Quét comment gần đây và chấm điểm tự động">
-                <span id="scanText">Quét ngay (30 phút gần nhất)</span>
+                <span id="scanText">Quét lấy bài viết (30 phút gần nhất)</span>
             </button>
-            <button id="scanPostsBtn" class="btn btn-primary">
-                Quét bài viết (60 phút gần nhất)
+            <button id="scanPostsBtn" class="btn btn-primary" type="button">
+                Comment tự động bài viết rủi ro (60 phút gần nhất)
             </button>
             <span id="scanPostsText" class="muted"></span>
         </form>
