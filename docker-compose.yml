@@ -1,0 +1,13 @@
+version: '3.8'  
+services:  
+  web:  
+    build: .  
+    ports:  
+      - "80:80"  
+    environment:  
+      - OPENAI_MODEL=llama-3.1-8b-instant  
+      - KB_SOURCE_NAME=IUH Official  
+  db:  
+    image: mysql:8.0  
+    environment:  
+      - MYSQL_DATABASE=kb_database

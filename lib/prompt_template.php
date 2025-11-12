@@ -25,6 +25,7 @@ SYS;
     switch ($intent) {
         case 'cutoff':
             $user = <<<PROMPT
+            
 Câu hỏi: {$q}
 
 Tài liệu IUH:

@@ -55,10 +55,19 @@ function kb_answer_cutoff(PDO $pdo, string $q, array $opts = []): ?array
         . '(?P<DGNL30>\d{1,2}(?:[.,]\d{1,2})?)\s+'
         . '(?P<KH>\d{1,2}(?:[.,]\d{1,2})?)/isu';
 
+    // Regex phát hiện tiêu đề chương trình  
+    $rxProgram = '/(chương\s*trình\s*(đại\s*trà|tăng\s*cường\s*tiếng\s*anh|liên\s*kết\s*quốc\s*tế))/iu';
+
+    $allResults = [];
+
     foreach ($byPost as $item) {
         $txt = $item['text'];
         error_log("[DEBUG] Checking text: " . mb_substr($txt, 0, 200));
         error_log("[DEBUG] Regex pattern: " . $rx);
+
+        // Tìm tất cả các match trong text  
+        preg_match_all($rx, $txt, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE);
+
         if (preg_match($rx, $txt, $m)) {
             error_log("[DEBUG] MATCHED! Name: " . $m['name']);
             $title = $item['meta']['title'] ?? '';
