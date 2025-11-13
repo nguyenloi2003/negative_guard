@@ -9,21 +9,21 @@ require_once __DIR__ . '/kb.php';   // đã có vi_norm(), kb_search_chunks_v2()
  */
 function kb_answer_cutoff(PDO $pdo, string $q, array $opts = []): ?array
 {
-    // 1) nhận diện năm + tên ngành (cho phép sai “quản trị/quản lý”)
-    $norm = vi_norm($q); // dùng hàm sẵn có trong kb.php
+    // 1) Nhận diện năm + tên ngành  
+    $norm = vi_norm($q);
     preg_match('/\b(20\d{2}|19\d{2})\b/u', $norm, $m);
     $year = $m[1] ?? date('Y');
 
-    // ý định câu hỏi
+    // Ý định câu hỏi  
     $intent = preg_match('/(điểm\s*(trúng|chuẩn|xét)\s*tuyển|điểm\s*sàn)/u', $norm);
     if (!$intent) return null;
 
-    // lấy “tên ngành” còn lại sau khi trừ các từ khóa
+    // Lấy tên ngành sau khi trừ các từ khóa  
     $normMajor = trim(preg_replace('/\b(điểm|trúng|chuẩn|xét|tuyển|sàn|năm|' . preg_quote($year, '/') . ')\b/u', ' ', $norm));
-    $normMajor = preg_replace('/\s+/u', ' ', $normMajor); // gộp khoảng trắng  
+    $normMajor = preg_replace('/\s+/u', ' ', $normMajor);
     if ($normMajor === '') $normMajor = $norm;
 
-    // 2) ưu tiên tài liệu IUH Official
+    // 2) Tìm kiếm chunks  
     $hits = kb_search_chunks_v2($pdo, 'điểm trúng tuyển ' . $normMajor . ' ' . $year, 12, [
         'source'    => 'IUH Official',
         'trust_min' => (float)($opts['trust_min'] ?? 0.85),
@@ -31,7 +31,7 @@ function kb_answer_cutoff(PDO $pdo, string $q, array $opts = []): ?array
     ]);
     if (!$hits) return null;
 
-    // gom theo post → lấy bài tốt nhất (mới nhất)
+    // 3) Gom theo post, sắp xếp theo thời gian mới nhất  
     $byPost = [];
     foreach ($hits as $h) {
         $pid = (int)$h['post_id'];
@@ -41,15 +41,16 @@ function kb_answer_cutoff(PDO $pdo, string $q, array $opts = []): ?array
     usort(
         $byPost,
         fn($a, $b) =>
-        strtotime($b['meta']['created_time'] ?? '1970-01-01') <=> strtotime($a['meta']['created_time'] ?? '1970-01-01')
+        strtotime($b['meta']['created_time'] ?? '1970-01-01') <=>
+            strtotime($a['meta']['created_time'] ?? '1970-01-01')
     );
 
-    // 3) regex linh hoạt bắt 4 cột điểm (TN, ĐGNL 1200, ĐGNL 30, Kết hợp)
-    $rxMajor = '(nh[óo]m\s*ng[àa]nh\s*)?'  // optional "Nhóm ngành"  
+    // 4) Regex pattern cho tên ngành và 4 cột điểm  
+    $rxMajor = '(nh[óo]m\s*ng[àa]nh\s*)?'
         . '(qu[aă]n\s*(?:l[ýy]|tr[ịi])\s*x[âa]y\s*d[ựu]ng|'
         . preg_quote($normMajor, '/') . ')';
 
-    $rx = '/(?P<name>' . $rxMajor . ').{0,300}?'  // tăng từ 120 lên 300  
+    $rx = '/(?P<name>' . $rxMajor . ').{0,300}?'
         . '(?P<TN>\d{1,2}(?:[.,]\d{1,2})?)\s+'
         . '(?P<DGNL1200>\d{3,4})\s+'
         . '(?P<DGNL30>\d{1,2}(?:[.,]\d{1,2})?)\s+'
@@ -60,41 +61,71 @@ function kb_answer_cutoff(PDO $pdo, string $q, array $opts = []): ?array
 
     $allResults = [];
 
+    // 5) Duyệt qua từng post để tìm tất cả các match  
     foreach ($byPost as $item) {
         $txt = $item['text'];
-        error_log("[DEBUG] Checking text: " . mb_substr($txt, 0, 200));
-        error_log("[DEBUG] Regex pattern: " . $rx);
 
-        // Tìm tất cả các match trong text  
+        // Tìm TẤT CẢ các match trong text  
         preg_match_all($rx, $txt, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE);
 
-        if (preg_match($rx, $txt, $m)) {
-            error_log("[DEBUG] MATCHED! Name: " . $m['name']);
-            $title = $item['meta']['title'] ?? '';
-            $date  = $item['meta']['created_time'] ?? '';
-            $url   = $item['meta']['permalink_url'] ?? '';
+        if (empty($matches)) continue;
 
-            // chuẩn hoá dấu phẩy → chấm
-            $fmt = fn($v) => str_replace(',', '.', $v);
+        foreach ($matches as $m) {
+            // Lấy vị trí của match để tìm tiêu đề chương trình phía trước  
+            $offset = $m[0][1];
+            $textBefore = mb_substr($txt, max(0, $offset - 800), 800);
 
-            $answer = sprintf(
-                "Điểm trúng tuyển **%s** năm **%s**:\n- TN: **%s**\n- ĐGNL (thang 1200): **%s**\n- ĐGNL (thang 30): **%s**\n- Xét kết hợp: **%s**",
-                trim($m['name']),
-                $year,
-                $fmt($m['TN']),
-                $m['DGNL1200'],
-                $fmt($m['DGNL30']),
-                $fmt($m['KH'])
-            );
-            return [
-                'answer'   => $answer,
-                'citation' => ['url' => $url, 'date' => $date, 'title' => $title],
+            // Phát hiện chương trình dựa trên tiêu đề  
+            $program = 'Chương trình Đại trà'; // Mặc định  
+            if (preg_match($rxProgram, $textBefore, $pMatch)) {
+                $programRaw = mb_strtolower($pMatch[1]);
+                if (preg_match('/tăng\s*cường/u', $programRaw)) {
+                    $program = 'Chương trình Tăng cường tiếng Anh';
+                } elseif (preg_match('/liên\s*kết/u', $programRaw)) {
+                    $program = 'Chương trình Liên kết quốc tế';
+                }
+            }
+
+            // Chuẩn hóa dấu phẩy thành dấu chấm  
+            $allResults[] = [
+                'program'   => $program,
+                'name'      => trim($m['name'][0]),
+                'TN'        => str_replace(',', '.', $m['TN'][0]),
+                'DGNL1200'  => $m['DGNL1200'][0],
+                'DGNL30'    => str_replace(',', '.', $m['DGNL30'][0]),
+                'KH'        => str_replace(',', '.', $m['KH'][0]),
+                'meta'      => $item['meta'],
             ];
-        } else {
-            error_log("[DEBUG] No match for this post");
         }
+
+        // Nếu đã tìm được kết quả, dừng lại (chỉ lấy từ post mới nhất)  
+        if (!empty($allResults)) break;
     }
-    return null;
+
+    if (empty($allResults)) return null;
+
+    // 6) Format câu trả lời với TẤT CẢ các chương trình  
+    $majorName = $allResults[0]['name'];
+    $answer = "Điểm trúng tuyển **{$majorName}** năm **{$year}**:\n\n";
+
+    foreach ($allResults as $result) {
+        $answer .= "**{$result['program']}:**\n";
+        $answer .= "- TN: **{$result['TN']}**\n";
+        $answer .= "- ĐGNL (thang 1200): **{$result['DGNL1200']}**\n";
+        $answer .= "- ĐGNL (thang 30): **{$result['DGNL30']}**\n";
+        $answer .= "- Xét kết hợp: **{$result['KH']}**\n\n";
+    }
+
+    // 7) Trả về kết quả với citation từ post đầu tiên  
+    $firstMeta = $allResults[0]['meta'];
+    return [
+        'answer'   => trim($answer),
+        'citation' => [
+            'url'   => $firstMeta['permalink_url'] ?? '',
+            'date'  => $firstMeta['created_time'] ?? '',
+            'title' => $firstMeta['title'] ?? '',
+        ],
+    ];
 }
 
 function kb_answer_fee(PDO $pdo, string $q, array $opts = []): ?array
