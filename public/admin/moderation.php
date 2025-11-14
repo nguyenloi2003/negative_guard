@@ -258,22 +258,14 @@ function risk_level($r)
                 <input type="number" name="limit" min="1" max="500" value="<?= htmlspecialchars($limit) ?>">
             </label>
 
-            <button class="btn" type="submit">Lọc</button>
+            <button class="btn" type="submit">Lọc danh sách đã quét</button>
 
             <button class="btn btn-primary" id="scanBtn" type="button" title="Quét comment gần đây và chấm điểm tự động">
-                <span id="scanText">Quét lấy bài viết (30 phút gần nhất)</span>
+                <span id="scanText">Quét bài viết và trả lời, ẩn tự động (30 phút gần nhất)</span>
             </button>
             <!-- <button id="scanPostsBtn" class="btn btn-primary" type="button">
                 Comment/Ẩn tự động bài viết rủi ro (60 phút gần nhất)
             </button> -->
-            <!-- NÚT MỚI -->
-            <button class="btn btn-primary" id="scanReplyBtn" type="button">
-                Trả lời tự động
-            </button>
-
-            <button class="btn btn-primary" id="scanHideBtn" type="button">
-                Ẩn tự động
-            </button>
             <span id="scanPostsText" class="muted"></span>
         </form>
 
@@ -319,7 +311,7 @@ function risk_level($r)
                         <div class="actions">
                             <button class="btn" type="button" data-reply>Trả lời</button>
                             <!-- <button class="btn" type="button" data-hide>Ẩn</button> -->
-                            <!-- <button class="btn" type="button" data-unhide>Hiện</button> -->
+                            <button class="btn" type="button" data-unhide>Hiện</button>
                         </div>
                     </article>
                 <?php endforeach; ?>
