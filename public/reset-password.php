@@ -1,36 +1,57 @@
 <?php
 require_once __DIR__ . '/../lib/config.php';
 require_once __DIR__ . '/../lib/db.php';
-require_once __DIR__ . '/../lib/auth.php';
+
 send_security_headers();
 
+$token = $_GET['token'] ?? '';
+$pdo = db();
 
-$err = '';
+// Kiểm tra token  
+$stmt = $pdo->prepare('  
+    SELECT t.*, u.username   
+    FROM password_reset_tokens t  
+    JOIN admin_users u ON t.admin_id = u.id  
+    WHERE t.token = ? AND t.used = 0 AND t.expires_at > NOW()  
+');
+$stmt->execute([$token]);
+$resetToken = $stmt->fetch(PDO::FETCH_ASSOC);
+
+if (!$resetToken) {
+    die('Link không hợp lệ hoặc đã hết hạn');
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (!csrf_verify($_POST['csrf'] ?? '')) {
-        $err = 'CSRF token không hợp lệ';
+    $newPassword = trim($_POST['new_password'] ?? '');
+    $confirmPassword = trim($_POST['confirm_password'] ?? '');
+
+    if ($newPassword !== $confirmPassword) {
+        $error = 'Mật khẩu xác nhận không khớp';
+    } elseif (strlen($newPassword) < 8) {
+        $error = 'Mật khẩu phải có ít nhất 8 ký tự';
     } else {
-        $u = trim($_POST['username'] ?? '');
-        $p = $_POST['password'] ?? '';
-        $stmt = db()->prepare('SELECT id, password_hash FROM admin_users WHERE username = ?');
-        $stmt->execute([$u]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        if ($row && password_verify($p, $row['password_hash'])) {
-            $_SESSION['admin_id'] = (int)$row['id'];
-            header('Location: /admin/dashboard.php');
-            exit;
-        }
-        $err = 'Sai tài khoản hoặc mật khẩu';
+        // Cập nhật mật khẩu  
+        $newHash = password_hash($newPassword, PASSWORD_DEFAULT);
+        $stmt = $pdo->prepare('UPDATE admin_users SET password_hash = ? WHERE id = ?');
+        $stmt->execute([$newHash, $resetToken['admin_id']]);
+
+        // Đánh dấu token đã dùng  
+        $stmt = $pdo->prepare('UPDATE password_reset_tokens SET used = 1 WHERE token = ?');
+        $stmt->execute([$token]);
+
+        header('Location: /login.php?reset=success');
+        exit;
     }
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="vi">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Đăng nhập Admin</title>
+    <title>Đặt lại mật khẩu - IUH Admin</title>
     <style>
         * {
             margin: 0;
@@ -62,19 +83,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             pointer-events: none;
         }
 
-        .warning {
-            padding: 12px 16px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            font-size: 14px;
-        }
-
-        .warning.critical {
-            background-color: #fee;
-            border: 1px solid #fcc;
-            color: #c33;
-        }
-
         @keyframes float {
             0% {
                 transform: translateY(0);
@@ -85,7 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        .login-container {
+        .reset-container {
             display: flex;
             width: 900px;
             max-width: 95%;
@@ -94,6 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             overflow: hidden;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
             animation: slideUp 0.6s ease-out;
+            z-index: 1;
         }
 
         @keyframes slideUp {
@@ -108,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        .login-left {
+        .reset-left {
             flex: 1;
             background: linear-gradient(135deg, #0066cc 0%, #0052a3 100%);
             padding: 60px 40px;
@@ -121,7 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             overflow: hidden;
         }
 
-        .login-left::before {
+        .reset-left::before {
             content: '';
             position: absolute;
             width: 300px;
@@ -162,10 +171,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        .logo-text {
-            font-size: 48px;
-            font-weight: bold;
-            color: #0066cc;
+        .logo-icon {
+            font-size: 60px;
         }
 
         .welcome-text h2 {
@@ -180,7 +187,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             line-height: 1.6;
         }
 
-        .login-right {
+        .reset-right {
             flex: 1;
             padding: 60px 50px;
             display: flex;
@@ -188,23 +195,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             justify-content: center;
         }
 
-        .login-header {
-            margin-bottom: 40px;
+        .reset-header {
+            margin-bottom: 30px;
         }
 
-        .login-header h3 {
+        .reset-header h3 {
             font-size: 28px;
             color: #333;
             margin-bottom: 10px;
         }
 
-        .login-header p {
+        .reset-header p {
             color: #666;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .user-info {
+            background: #f0f9ff;
+            border: 1px solid #bae6fd;
+            border-radius: 10px;
+            padding: 12px 16px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .user-info svg {
+            color: #0066cc;
+        }
+
+        .user-info span {
+            color: #0066cc;
+            font-weight: 600;
+        }
+
+        .message {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
             font-size: 14px;
         }
 
+        .message.error {
+            background-color: #fee;
+            border: 1px solid #fcc;
+            color: #c33;
+        }
+
         .form-group {
-            margin-bottom: 25px;
+            margin-bottom: 20px;
             position: relative;
         }
 
@@ -243,24 +284,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             box-shadow: 0 0 0 4px rgba(0, 102, 204, 0.1);
         }
 
-        .forgot-password {
-            text-align: right;
-            margin-bottom: 25px;
+        .password-requirements {
+            font-size: 12px;
+            color: #666;
+            margin-top: 6px;
+            padding-left: 45px;
         }
 
-        .forgot-password a {
-            color: #0066cc;
-            text-decoration: none;
-            font-size: 14px;
-            transition: color 0.3s ease;
-        }
-
-        .forgot-password a:hover {
-            color: #0052a3;
-            text-decoration: underline;
-        }
-
-        .login-btn {
+        .submit-btn {
             width: 100%;
             padding: 15px;
             background: linear-gradient(135deg, #0066cc 0%, #0052a3 100%);
@@ -272,14 +303,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             cursor: pointer;
             transition: all 0.3s ease;
             box-shadow: 0 4px 15px rgba(0, 102, 204, 0.3);
+            margin-bottom: 20px;
         }
 
-        .login-btn:hover {
+        .submit-btn:hover {
             transform: translateY(-2px);
             box-shadow: 0 6px 20px rgba(0, 102, 204, 0.4);
         }
 
-        .login-btn:active {
+        .submit-btn:active {
             transform: translateY(0);
         }
 
@@ -309,6 +341,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             right: 0;
         }
 
+        .back-link {
+            text-align: center;
+            margin-top: 15px;
+        }
+
+        .back-link a {
+            color: #0066cc;
+            text-decoration: none;
+            font-size: 14px;
+            transition: color 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .back-link a:hover {
+            color: #0052a3;
+            text-decoration: underline;
+        }
+
         .support-info {
             text-align: center;
             margin-top: 20px;
@@ -317,16 +369,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         @media (max-width: 768px) {
-            .login-container {
+            .reset-container {
                 flex-direction: column;
                 width: 90%;
             }
 
-            .login-left {
+            .reset-left {
                 padding: 40px 30px;
             }
 
-            .login-right {
+            .reset-right {
                 padding: 40px 30px;
             }
         }
@@ -336,63 +388,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <body>
     <div class="background-pattern"></div>
 
-    <div class="login-container">
-        <div class="login-left">
+    <div class="reset-container">
+        <div class="reset-left">
             <div class="logo-container">
                 <div class="logo">
-                    <div class="logo-text">IUH</div>
+                    <div class="logo-icon">🔑</div>
                 </div>
                 <div class="welcome-text">
-                    <h2>Chào mừng!</h2>
-                    <p>Trường Đại học Công nghiệp TP.HCM</p>
-                    <p>Industrial University of Ho Chi Minh City</p>
+                    <h2>Tạo mật khẩu mới</h2>
+                    <p>Hãy chọn một mật khẩu mạnh để bảo vệ tài khoản của bạn.</p>
                 </div>
             </div>
         </div>
 
-        <div class="login-right">
-            <div class="login-header">
-                <h3>Đăng nhập Admin</h3>
-                <?php if ($err): ?><div class="warning critical"><?= htmlspecialchars($err) ?></div><?php endif; ?>
-
+        <div class="reset-right">
+            <div class="reset-header">
+                <h3>Đặt lại mật khẩu</h3>
+                <p>Nhập mật khẩu mới cho tài khoản của bạn.</p>
             </div>
 
+            <div class="user-info">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+                <span><?= htmlspecialchars($resetToken['username']) ?></span>
+            </div>
+
+            <?php if (isset($error)): ?>
+                <div class="message error"><?= htmlspecialchars($error) ?></div>
+            <?php endif; ?>
+
             <form method="post">
-                <input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token()) ?>">
-
                 <div class="form-group">
-                    <label for="username">Tài khoản</label>
-                    <div class="input-wrapper">
-                        <svg class="input-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                            <circle cx="12" cy="7" r="4"></circle>
-                        </svg>
-                        <input type="text" id="username" name="username" placeholder="Nhập usename" required>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label for="password">Mật khẩu</label>
+                    <label for="new_password">Mật khẩu mới</label>
                     <div class="input-wrapper">
                         <svg class="input-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                             <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
                         </svg>
-                        <input type="password" id="password" name="password" placeholder="Nhập password" required>
+                        <input type="password" id="new_password" name="new_password" placeholder="Nhập mật khẩu mới" required>
                     </div>
+
+                    <div class="input-wrapper" style="margin-top: 1rem;">
+                        <svg class="input-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                        </svg>
+                        <input type="password" id="confirm_password" name="confirm_password" placeholder="Xác nhận mật khẩu" required>
+                    </div>
+                    <button type="submit" class="submit-btn" style="margin-top: 1rem;">Đặt lại mật khẩu</button>
                 </div>
 
-                <div class="forgot-password">
-                    <a href="/forgot-password.php">Quên mật khẩu?</a>
-                </div>
-
-                <button type="submit" class="login-btn">Đăng nhập</button>
-
-                <div class="divider">hoặc</div>
-
-                <div class="support-info">
-                    Cần hỗ trợ? Liên hệ IT: <strong>it@iuh.edu.vn</strong>
-                </div>
             </form>
         </div>
     </div>

@@ -2,6 +2,7 @@
     "require": {
         "smalot/pdfparser": "^2.12",
         "phpoffice/phpword": "^1.4",
-        "thiagoalessio/tesseract_ocr": "^2.13"
+        "thiagoalessio/tesseract_ocr": "^2.13",
+        "phpmailer/phpmailer": "^7.0"
     }
 }

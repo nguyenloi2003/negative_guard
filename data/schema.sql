@@ -117,3 +117,23 @@ CREATE FULLTEXT INDEX ft_chunk ON kb_chunks (text, text_clean);
 
 ANALYZE TABLE kb_posts;
 ANALYZE TABLE kb_chunks;
+
+ALTER TABLE admin_users ADD COLUMN email VARCHAR(255);  
+UPDATE admin_users SET email = 'septcomay@gmail.com' WHERE id = 1;
+
+CREATE TABLE IF NOT EXISTS password_reset_tokens (  
+    id INT AUTO_INCREMENT PRIMARY KEY,  
+    admin_id INT UNSIGNED NOT NULL,  
+    token VARCHAR(64) NOT NULL,  
+    expires_at DATETIME NOT NULL,  
+    used TINYINT DEFAULT 0,  
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,  
+    UNIQUE KEY uniq_token (token),  
+    KEY idx_expires (expires_at),  
+    KEY idx_admin_id (admin_id)  
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE password_reset_tokens   
+ADD CONSTRAINT fk_reset_admin   
+FOREIGN KEY (admin_id) REFERENCES admin_users(id)   
+ON DELETE CASCADE;
