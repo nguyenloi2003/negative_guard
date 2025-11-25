@@ -4,7 +4,23 @@ require_once __DIR__ . '/../../lib/auth.php';
 require_once __DIR__ . '/../../lib/fb_graph.php';
 require_once __DIR__ . '/../../lib/openai_client.php';
 require_admin();
+
+// set thời gian việt nam
+function format_vn_time($utcTime)
+{
+    if (empty($utcTime)) return '';
+    try {
+        $dt = new DateTime($utcTime);
+        $dt->setTimezone(new DateTimeZone('Asia/Ho_Chi_Minh'));
+        return $dt->format('d/m/Y H:i:s');
+    } catch (Exception $e) {
+        return $utcTime; // fallback nếu lỗi    
+    }
+}
+
 send_security_headers();
+
+
 
 $err = '';
 $posts = [];
@@ -273,7 +289,7 @@ try {
                     <div>
                         <div><a class="badge" target="_blank" href="<?= htmlspecialchars($p['permalink_url'] ?? '#') ?>">Mở Facebook</a> <span class="badge"><?= htmlspecialchars($p['id']) ?></span></div>
                         <div style="margin-top:8px;white-space:pre-wrap;"><?= htmlspecialchars($p['message'] ?? '[Không có nội dung]') ?></div>
-                        <div style="opacity:.7;margin-top:6px;">Đăng lúc: <?= htmlspecialchars($p['created_time'] ?? '') ?></div>
+                        <div style="opacity:.7;margin-top:6px;">Đăng lúc: <?= htmlspecialchars(format_vn_time($p['created_time'] ?? '')) ?></div>
                     </div>
                     <?php if (!empty($p['full_picture'])): ?>
                         <img src="<?= htmlspecialchars($p['full_picture']) ?>" alt="thumb" style="max-width:200px;border-radius:10px">
@@ -285,10 +301,10 @@ try {
                     <div>
                         <?php foreach (($p['comments']['data'] ?? []) as $c): ?>
                             <div class="warning">
-                                <div style="font-weight:600;"><?= htmlspecialchars(($c['from']['name'] ?? 'Ẩn danh') . ' — ' . ($c['created_time'] ?? '')) ?></div>
+                                <div style="font-weight:600;"><?= htmlspecialchars(($c['from']['name'] ?? 'Ẩn danh') . ' — ' . format_vn_time($c['created_time'] ?? '')) ?></div>
                                 <div style="white-space:pre-wrap;"><?= htmlspecialchars($c['message'] ?? '') ?></div>
                                 <!-- <form method="post" action="/admin/action.php" onsubmit="return doComment(event, '<?= htmlspecialchars($c['id']) ?>')"> -->
-                                <form method="post" action="/admin/action.php" onsubmit="return changePassword(event)">
+                                <form method="post" action="/admin/action.php" onsubmit="return doComment(event)">
                                     <input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token()) ?>">
                                     <input type="hidden" name="action" value="comment">
                                     <input type="hidden" name="id" value="<?= htmlspecialchars($c['id']) ?>">
@@ -381,14 +397,36 @@ try {
         // Handler cho form đăng bài (giữ nguyên)  
         async function publishNotice(e) {
             e.preventDefault();
-            const fd = new FormData(e.target);
-            const res = await fetch('/admin/action.php', {
-                method: 'POST',
-                body: fd
-            });
-            const data = await res.json();
-            if (data.error) alert('Lỗi: ' + data.error);
-            else alert('Đã đăng bài: ' + (data.id || 'OK'));
+            const form = e.target;
+            const fd = new FormData(form);
+
+            const submitBtn = form.querySelector('button[type="submit"]');
+            const originalText = submitBtn.textContent;
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Đang đăng...';
+
+            try {
+                const res = await fetch('/admin/action.php', {
+                    method: 'POST',
+                    body: fd
+                });
+                const data = await res.json();
+
+                if (data.error) {
+                    alert('Lỗi: ' + data.error);
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = originalText;
+                } else {
+                    alert('✓ Đã đăng bài thành công!');
+                    // Reload trang để thấy bài mới  
+                    location.reload();
+                }
+            } catch (err) {
+                alert('Lỗi kết nối: ' + err.message);
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+            }
+
             return false;
         }
 

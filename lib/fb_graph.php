@@ -121,3 +121,37 @@ function fb_get_comment($commentId)
     $fields = 'id,from{name,id},message,created_time,permalink_url,is_hidden,parent{id}';
     return fb_api("/{$commentId}", ['fields' => $fields]);
 }
+
+// upload ảnh
+function fb_upload_photo($tmpPath)
+{
+    $pageId = envv('FB_PAGE_ID');
+    $token = envv('FB_PAGE_ACCESS_TOKEN');
+
+    $ch = curl_init("https://graph.facebook.com/v18.0/{$pageId}/photos");
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, [
+        'source' => new CURLFile($tmpPath),
+        'published' => 'false', // upload nhưng chưa đăng  
+        'access_token' => $token
+    ]);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+
+    $response = curl_exec($ch);
+    $data = json_decode($response, true);
+    curl_close($ch);
+
+    if (isset($data['id'])) {
+        return $data['id']; // trả về photo ID  
+    }
+    throw new Exception('Upload ảnh thất bại: ' . ($data['error']['message'] ?? 'Unknown error'));
+}
+
+function fb_publish_post_with_photo($message, $photoId)
+{
+    $pageId = envv('FB_PAGE_ID');
+    return fb_api("/{$pageId}/feed", [
+        'message' => $message,
+        'attached_media' => json_encode([['media_fbid' => $photoId]])
+    ], 'POST');
+}

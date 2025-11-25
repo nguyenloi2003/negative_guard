@@ -288,6 +288,41 @@
       });  
     }  
   }  
+
+  async function handleHideUnhide(id, btn, shouldHide) {  
+  const old = btn.textContent;  
+  btn.disabled = true;  
+  btn.textContent = shouldHide ? 'Đang ẩn…' : 'Đang hiện…';  
+  
+  try {  
+    await callAction({  
+      action: 'hide_comment',  
+      id: id,  
+      hide: shouldHide ? '1' : '0'  
+    });  
+    alert(shouldHide ? 'Đã ẩn bình luận.' : 'Đã hiện bình luận.');  
+      
+    // Toggle button  
+    if (shouldHide) {  
+      btn.textContent = 'Hiện';  
+      btn.setAttribute('data-unhide', '');  
+      btn.removeAttribute('data-hide');  
+    } else {  
+      btn.textContent = 'Ẩn';  
+      btn.setAttribute('data-hide', '');  
+      btn.removeAttribute('data-unhide');  
+    }  
+      
+    // Re-bind event listener  
+    btn.onclick = () => handleHideUnhide(id, btn, !shouldHide);  
+      
+  } catch (e) {  
+    alert((shouldHide ? 'Lỗi ẩn: ' : 'Lỗi hiện: ') + e.message);  
+    btn.textContent = old;  
+  } finally {  
+    btn.disabled = false;  
+  }  
+}
   
   // ============================================================  
   // 6. INITIALIZATION  

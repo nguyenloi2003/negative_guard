@@ -140,7 +140,7 @@ send_security_headers();
                             cảnh báo tức thì và cung cấp bảng điều khiển trực quan để duyệt/gỡ/chỉnh chỉ với <strong>1 lần bấm</strong>.
                             Mọi thao tác đều được lưu vết, dữ liệu thuộc về bạn, và có thể tùy chỉnh danh sách từ nhạy cảm cho phù hợp bối cảnh giáo dục.
                         </p>
-                        <a class="btn" href="about.php">Tìm hiểu về iCheck</a>
+
                     </div>
                 </div>
             </section>

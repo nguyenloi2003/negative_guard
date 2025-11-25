@@ -9,6 +9,19 @@ require_once __DIR__ . '/../../lib/fb_graph.php';
 send_security_headers();
 require_admin();
 
+// set thời gian việt nam
+function format_vn_time($utcTime)
+{
+    if (empty($utcTime)) return '';
+    try {
+        $dt = new DateTime($utcTime);
+        $dt->setTimezone(new DateTimeZone('Asia/Ho_Chi_Minh'));
+        return $dt->format('d/m/Y H:i:s');
+    } catch (Exception $e) {
+        return $utcTime; // fallback nếu lỗi    
+    }
+}
+
 $pdo = db();
 
 $minRisk = max(0, (int)($_GET['min_risk'] ?? 60));
@@ -261,7 +274,7 @@ function risk_level($r)
             <button class="btn" type="submit">Lọc danh sách đã quét</button>
 
             <button class="btn btn-primary" id="scanBtn" type="button" title="Quét comment gần đây và chấm điểm tự động">
-                <span id="scanText">Quét bài viết và trả lời, ẩn tự động (30 phút gần nhất)</span>
+                <span id="scanText">Quét bài viết và trả lời, ẩn tự động (trong vòng 1 ngày qua)</span>
             </button>
             <!-- <button id="scanPostsBtn" class="btn btn-primary" type="button">
                 Comment/Ẩn tự động bài viết rủi ro (60 phút gần nhất)
@@ -281,7 +294,7 @@ function risk_level($r)
                 <?php foreach ($rows as $r):
                     $cid = $r['object_id'];
                     try {
-                        $c = fb_api("/$cid", ['fields' => 'id,from{name,id},message,permalink_url,created_time']);
+                        $c = fb_api("/$cid", ['fields' => 'id,from{name,id},message,permalink_url,created_time,is_hidden']);
                     } catch (Exception $e) {
                         $c = ['id' => $cid, 'from' => ['name' => 'N/A'], 'message' => '(Không lấy được nội dung từ Graph)', 'permalink_url' => '#', 'created_time' => $r['last_seen']];
                     }
@@ -301,7 +314,7 @@ function risk_level($r)
 
                         <div class="meta" style="margin-top:6px">
                             <strong><?= htmlspecialchars($c['from']['name'] ?? 'N/A') ?></strong>
-                            <span class="small">• <?= htmlspecialchars($c['created_time'] ?? '') ?></span>
+                            <span class="small">• <?= htmlspecialchars(format_vn_time($c['created_time'] ?? '')) ?></span>
                         </div>
 
                         <div class="msg" data-collapsed="1" style="max-height:4.5em; overflow:hidden;">
@@ -310,8 +323,11 @@ function risk_level($r)
 
                         <div class="actions">
                             <button class="btn" type="button" data-reply>Trả lời</button>
-                            <!-- <button class="btn" type="button" data-hide>Ẩn</button> -->
-                            <button class="btn" type="button" data-unhide>Hiện</button>
+                            <?php if (!empty($c['is_hidden'])): ?>
+                                <button class="btn" type="button" data-unhide>Hiện</button>
+                            <?php else: ?>
+                                <button class="btn" type="button" data-hide>Ẩn</button>
+                            <?php endif; ?>
                         </div>
                     </article>
                 <?php endforeach; ?>
