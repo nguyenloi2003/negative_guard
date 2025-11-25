@@ -250,6 +250,7 @@ function risk_level($r)
         <div><strong style="color: red;">Cảnh báo cao</strong></div>
         <nav>
             <a class="badge" href="/admin/dashboard.php">Bảng điều khiển</a>
+            <a href="/admin/pdf_scan.php" class="badge btn-danger">Upload pdf</a>
             <a class="badge" href="/logout.php">Đăng xuất</a>
         </nav>
     </header>

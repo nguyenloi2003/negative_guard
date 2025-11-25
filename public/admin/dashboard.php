@@ -229,6 +229,7 @@ try {
         <div><strong style="color: red;">Admin Dashboard</strong></div>
         <nav>
             <a href="/admin/moderation.php" class="badge btn-danger">Cảnh báo cao</a>
+            <a href="/admin/pdf_scan.php" class="badge btn-danger">Upload pdf</a>
             <a href="#" class="badge btn-success" onclick="openPasswordModal(event)">Đổi mật khẩu</a>
             <a href="/logout.php" class="badge btn-success">Đăng xuất</a>
         </nav>

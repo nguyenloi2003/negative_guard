@@ -85,26 +85,26 @@ function kb_parse_pdf(string $path): string
     if (!is_dir($pagesDir)) {
         throw new RuntimeException("Không thể tạo thư mục tạm: $pagesDir");
     } else {
-        echo "[DEBUG] Đã tạo thư mục: $pagesDir\n";
+        // echo "[DEBUG] Đã tạo thư mục: $pagesDir\n";
     }
 
     $pdftoppm = _env_unquote(envv('PDFTOPPM_BIN', 'pdftoppm'));
     $cmd = _cmd_quote($pdftoppm) . ' -png ' . _cmd_quote(str_replace('\\', '/', $path)) . ' ' . _cmd_quote(str_replace('\\', '/', $pagesDir . '/page'));
 
-    echo "[DEBUG CMD] $cmd\n";
+    // echo "[DEBUG CMD] $cmd\n";
     @exec($cmd, $outLines, $code);
 
-    echo "[DEBUG] Return code = $code\n";
-    echo "[DEBUG] Files sinh ra:\n";
+    // echo "[DEBUG] Return code = $code\n";
+    // echo "[DEBUG] Files sinh ra:\n";
     print_r(glob($pagesDir . '/*.png'));
 
     $text = '';
     foreach (glob($pagesDir . '/page*.png') as $img) {
-        echo "[DEBUG OCR] Đang đọc $img\n";
+        // echo "[DEBUG OCR] Đang đọc $img\n";
         try {
             $text .= kb_parse_image($img) . "\n";
         } catch (Throwable $e) {
-            echo "[ERROR OCR] " . $e->getMessage() . "\n";
+            // echo "[ERROR OCR] " . $e->getMessage() . "\n";
         }
         @unlink($img);
     }

@@ -6,6 +6,8 @@ require_once __DIR__ . '/../../lib/auth.php';
 require_once __DIR__ . '/../../lib/fb_graph.php';
 require_once __DIR__ . '/../../lib/openai_client.php';
 require_once __DIR__ . '/../../lib/db.php';
+require_once __DIR__ . '/../../vendor/autoload.php';
+require_once __DIR__ . '/../../lib/kb_ingest.php';
 
 // --- CHO PHÉP CLI ---
 $isCli = (php_sapi_name() === 'cli') || defined('CLI_MODE');
@@ -737,6 +739,36 @@ try {
             $ins = db()->prepare('INSERT IGNORE INTO auto_actions(object_id,object_type,action,risk,reason,response_text) VALUES (?,?,?,?,?,?)');
             $ins->execute([$id, 'comment', 'replied', 0, 'kb_manual', $reply]);
             echo json_encode(['ok' => true]);
+            break;
+
+        case 'scan_pdf':
+            if (!isset($_FILES['pdf_file'])) {
+                throw new Exception('Không có file PDF');
+            }
+
+            $tmpPath = $_FILES['pdf_file']['tmp_name'];
+            $fileName = $_FILES['pdf_file']['name'];
+
+            // Sử dụng kb_parse_pdf() - hàm này tự động fallback sang pdftotext/OCR  
+            $text = kb_parse_pdf($tmpPath);
+
+            if (empty(trim($text))) {
+                throw new Exception('Không thể trích xuất text từ PDF. File có thể là ảnh scan không có text layer.');
+            }
+
+            // Parse lại để lấy metadata  
+            $parser = new \Smalot\PdfParser\Parser();
+            $pdf = $parser->parseFile($tmpPath);
+            $pages = count($pdf->getPages());
+
+            echo json_encode([
+                'success' => true,
+                'pages' => $pages,
+                'text' => $text,
+                'textLength' => strlen($text),
+                'fileName' => $fileName,
+                'metadata' => $pdf->getDetails()
+            ], JSON_UNESCAPED_UNICODE);
             break;
 
 
