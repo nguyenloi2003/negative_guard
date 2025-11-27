@@ -11,7 +11,7 @@ require_once __DIR__ . '/../lib/text_utils.php';
 
 $opts = [
     'dir'     => null,
-    'source'  => 'IUH Official',
+    'source'  => 'IUHDemo',
     'trust'   => 1.00,
     'topic'   => 'auto',  // auto → đoán từ nội dung
     'doc'     => 'auto',
@@ -38,7 +38,7 @@ function vprintln($s)
 }
 
 if (!$opts['dir'] || !is_dir($opts['dir'])) {
-    exit("Usage: php tools/ingest_docs.php --dir=/path/to/folder [--source='IUH Official'] [--trust=1.0] [--topic=auto] [--doc=auto] [--verbose] [--force] [--ext=pdf,docx]\n");
+    exit("Usage: php tools/ingest_docs.php --dir=/path/to/folder [--source='IUHDemo'] [--trust=1.0] [--topic=auto] [--doc=auto] [--verbose] [--force] [--ext=pdf,docx]\n");
 }
 $allowExt = array_filter(array_map('trim', explode(',', $opts['ext'])));
 $allowExt = $allowExt ?: ['pdf', 'docx'];

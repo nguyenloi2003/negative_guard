@@ -96,7 +96,7 @@ function kb_parse_pdf(string $path): string
 
     // echo "[DEBUG] Return code = $code\n";
     // echo "[DEBUG] Files sinh ra:\n";
-    print_r(glob($pagesDir . '/*.png'));
+    // print_r(glob($pagesDir . '/*.png'));
 
     $text = '';
     foreach (glob($pagesDir . '/page*.png') as $img) {

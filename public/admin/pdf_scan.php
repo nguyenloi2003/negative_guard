@@ -255,18 +255,16 @@ try {
                     method: 'POST',
                     body: fd
                 });
-                const data = await res.json();
 
-                if (data.error) {
-                    alert('Lỗi: ' + data.error);
-                } else {
-                    alert('Đã quét PDF: ' + data.pages + ' trang\nText: ' + data.text.substring(0, 100) + '...');
-                }
+                const text = await res.text();
+                console.log('Raw response:', text);
+                console.log('Response length:', text.length);
+
+                const data = JSON.parse(text);
+                // ... xử lý kết quả  
             } catch (e) {
                 alert('Lỗi quét PDF: ' + e.message);
             }
-
-            return false;
         }
     </script>
 

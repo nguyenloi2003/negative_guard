@@ -25,7 +25,7 @@ function kb_answer_cutoff(PDO $pdo, string $q, array $opts = []): ?array
 
     // 2) Tìm kiếm chunks  
     $hits = kb_search_chunks_v2($pdo, 'điểm trúng tuyển ' . $normMajor . ' ' . $year, 12, [
-        'source'    => 'IUH Official',
+        'source'    => 'IUHDemo',
         'trust_min' => (float)($opts['trust_min'] ?? 0.85),
         'days'      => (int)($opts['days'] ?? 900),
     ]);
@@ -138,7 +138,7 @@ function kb_answer_fee(PDO $pdo, string $q, array $opts = []): ?array
 
     // 2. Truy xuất dữ liệu IUH
     $hits = kb_search_chunks_v2($pdo, $q, 15, [
-        'source'    => 'IUH Official',
+        'source'    => 'IUHDemo',
         'trust_min' => (float)($opts['trust_min'] ?? 0.75),
         'days'      => (int)($opts['days'] ?? 900),
     ]);

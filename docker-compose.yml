@@ -6,7 +6,7 @@ services:
       - "80:80"  
     environment:  
       - OPENAI_MODEL=meta-llama/llama-4-maverick-17b-128e-instruct
-      - KB_SOURCE_NAME=IUH Official  
+      - KB_SOURCE_NAME=IUHDemo  
   db:  
     image: mysql:8.0  
     environment:  

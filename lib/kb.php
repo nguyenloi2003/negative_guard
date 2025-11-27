@@ -42,7 +42,7 @@ function kb_upsert_source(PDO $pdo, string $name, string $platform = 'facebook',
 /** Upsert post + chunks */
 function kb_upsert_post_from_fb(PDO $pdo, array $fb): int
 {
-    $sourceName = envv('KB_SOURCE_NAME', 'IUH Official');
+    $sourceName = envv('KB_SOURCE_NAME', 'IUHDemo');
     $trust      = (float) envv('KB_SOURCE_TRUST', '1.0');
 
     $sourceId = kb_upsert_source($pdo, $sourceName, 'facebook', $trust, null);
@@ -225,7 +225,7 @@ function expand_vi_query($q)
 /**
  * Tìm top-k chunk theo điểm fulltext (title + chunk) + boost theo độ mới.
  * opts:
- *  - source: 'IUH Official' (mặc định). Truyền '%' để cho phép mọi nguồn.
+ *  - source: 'IUHDemo' (mặc định). Truyền '%' để cho phép mọi nguồn.
  *  - trust_min: 0..1
  *  - days: khoảng thời gian (mặc định 730 ngày)
  */
@@ -233,7 +233,7 @@ function kb_search_chunks_like(PDO $pdo, string $q, int $k = 6, array $opts = []
 {
     $trustMin = (float)($opts['trust_min'] ?? 0.9);
     $days     = (int)($opts['days'] ?? 730);
-    $source   = $opts['source'] ?? 'IUH Official';
+    $source   = $opts['source'] ?? 'IUHDemo';
     $wild     = ($source === '%') ? 1 : 0;
     $qlike    = '%' . preg_replace('/\s+/u', '%', $q) . '%';
 
@@ -295,7 +295,7 @@ function kb_search_chunks_v2(PDO $pdo, string $q, int $k = 6, array $opts = []):
 {
     $trustMin = (float)($opts['trust_min'] ?? 0.9);
     $days     = (int)($opts['days'] ?? 730);
-    $source   = $opts['source'] ?? 'IUH Official';
+    $source   = $opts['source'] ?? 'IUHDemo';
     $wild     = ($source === '%') ? 1 : 0;
     $k        = max(1, min(50, (int)$k));
 

@@ -53,7 +53,7 @@ try {
      * 1) TRUY HỒI (ưu tiên nguồn IUH)
      * ========================= */
     $hits = kb_search_chunks_v2($pdo, $q, 12, [
-        'source'    => 'IUH Official',
+        'source'    => 'IUHDemo',
         'trust_min' => 0.7,
         'days'      => 1200,
     ]);

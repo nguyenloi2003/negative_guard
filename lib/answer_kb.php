@@ -23,7 +23,7 @@ function kb_best_answer_string(PDO $pdo, string $q): array
     $days     = (int)   envv('AUTO_KB_REPLY_TIMEBOX_DAYS', 730);
 
     $hits = kb_search_chunks_v2($pdo, $q, 6, [
-        'source'    => 'IUH Official',
+        'source'    => 'IUHDemo',
         'trust_min' => $trustMin,
         'days'      => $days
     ]);
@@ -31,7 +31,7 @@ function kb_best_answer_string(PDO $pdo, string $q): array
     // fallback nhẹ nếu chưa thấy
     if (!$hits) {
         $hits = kb_search_chunks_v2($pdo, $q, 6, [
-            'source' => 'IUH Official',
+            'source' => 'IUHDemo',
             'trust_min' => max(0.7, $trustMin - 0.1),
             'days' => $days + 365
         ]);

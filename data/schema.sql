@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS auto_actions (
 CREATE TABLE IF NOT EXISTS kb_sources (
   id INT AUTO_INCREMENT PRIMARY KEY,
   platform VARCHAR(16) NOT NULL,               -- 'facebook' | 'web'
-  source_name VARCHAR(128) NOT NULL,           -- 'IUH Official'
+  source_name VARCHAR(128) NOT NULL,           -- 'IUHDemo'
   trust_level DECIMAL(3,2) NOT NULL DEFAULT 1.00,
   url VARCHAR(255),
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP

@@ -115,29 +115,6 @@
   }  
   
   /**  
-   * Xử lý ẩn/hiện comment  
-   */  
-  async function handleHideUnhide(id, btn, shouldHide) {  
-    const old = btn.textContent;  
-    btn.disabled = true;  
-    btn.textContent = shouldHide ? 'Đang ẩn…' : 'Đang hiện…';  
-  
-    try {  
-      await callAction({  
-        action: 'hide_comment',  
-        id: id,  
-        hide: shouldHide ? '1' : '0'  
-      });  
-      alert(shouldHide ? 'Đã ẩn bình luận.' : 'Đã hiện bình luận.');  
-    } catch (e) {  
-      alert((shouldHide ? 'Lỗi ẩn: ' : 'Lỗi hiện: ') + e.message);  
-    } finally {  
-      btn.disabled = false;  
-      btn.textContent = old;  
-    }  
-  }  
-  
-  /**  
    * Khởi tạo các nút action cho từng comment card  
    */  
   function initCommentActions() {  
@@ -190,50 +167,7 @@
       if (scanText) scanText.textContent = old;  
     }  
   }  
-  
-  /**  
-   * Xử lý quét và reply only  
-   */  
-  async function handleScanReply() {  
-    const scanReplyBtn = document.getElementById('scanReplyBtn');  
-    if (!scanReplyBtn) return;  
-  
-    scanReplyBtn.disabled = true;  
-  
-    try {  
-      const data = await callAction({  
-        action: 'scan_reply_only',  
-        window: getWindowMinutes()  
-      });  
-      alert(`Đã quét: ${data.scanned}\nVượt ngưỡng: ${data.high_risk}\nĐã trả lời: ${data.replied}`);  
-      location.reload();  
-    } catch (e) {  
-      alert('Lỗi: ' + e.message);  
-      scanReplyBtn.disabled = false;  
-    }  
-  }  
-  
-  /**  
-   * Xử lý quét và hide only  
-   */  
-  async function handleScanHide() {  
-    const scanHideBtn = document.getElementById('scanHideBtn');  
-    if (!scanHideBtn) return;  
-  
-    scanHideBtn.disabled = true;  
-  
-    try {  
-      const data = await callAction({  
-        action: 'scan_hide_only',  
-        window: getWindowMinutes()  
-      });  
-      alert(`Đã quét: ${data.scanned}\nVượt ngưỡng: ${data.high_risk}\nĐã ẩn: ${data.hidden}`);  
-      location.reload();  
-    } catch (e) {  
-      alert('Lỗi: ' + e.message);  
-      scanHideBtn.disabled = false;  
-    }  
-  }  
+
   
   /**  
    * Xử lý quét bài viết  
@@ -265,20 +199,10 @@
    */  
   function initScanButtons() {  
     const scanBtn = document.getElementById('scanBtn');  
-    const scanReplyBtn = document.getElementById('scanReplyBtn');  
-    const scanHideBtn = document.getElementById('scanHideBtn');  
     const scanPostsBtn = document.getElementById('scanPostsBtn');  
   
     if (scanBtn) {  
       scanBtn.addEventListener('click', handleFullScan);  
-    }  
-  
-    if (scanReplyBtn) {  
-      scanReplyBtn.addEventListener('click', handleScanReply);  
-    }  
-  
-    if (scanHideBtn) {  
-      scanHideBtn.addEventListener('click', handleScanHide);  
     }  
   
     if (scanPostsBtn) {  

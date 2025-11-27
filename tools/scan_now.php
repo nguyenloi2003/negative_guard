@@ -48,8 +48,7 @@ if ($DEBUG) {
     $sinceStr = $noTimeFilter ? 'NO_TIME_FILTER' : gmdate('c', $sinceUnix);
     fwrite(STDERR, "PAGE_ID={$pageId}, window={$window}m, since={$sinceStr}\n");
     fwrite(STDERR, "CFG: doReply=" . ($doReply ? 'true' : 'false') . ", doHide=" . ($doHide ? 'true' : 'false') . ", threshold={$threshold}\n");
-}
-
+} 
 
 try {
     // 1) Lấy 25 post mới nhất (không lọc)
@@ -161,7 +160,7 @@ foreach ($posts as $p) {
             } else {
                 try {
                     fb_comment($cid, $reply);
-                    aa_upsert($cid, 'comment', 'replied', $risk, 'cli_scan', $reply);
+                    aa_upsert($cid, 'comment', 'replied', 0, 'cli_scan', $reply);
                     $out['replied']++;
                     if ($DEBUG) fwrite(STDERR, "      replied OK\n");
                     usleep(600000);
@@ -177,7 +176,7 @@ foreach ($posts as $p) {
             } elseif ($doHide) {
                 try {
                     fb_hide_comment($cid, true);
-                    aa_upsert($cid, 'comment', 'hidden', $risk, 'cli_scan');
+                    aa_upsert($cid, 'comment', 'hidden', 0, 'cli_scan');
                     $out['hidden']++;
                     if ($DEBUG) fwrite(STDERR, "      hidden OK\n");
                     usleep(600000);
