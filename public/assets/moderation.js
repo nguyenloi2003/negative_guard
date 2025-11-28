@@ -145,28 +145,42 @@
   /**  
    * Xử lý quét toàn bộ (reply + hide)  
    */  
-  async function handleFullScan() {  
-    const scanBtn = document.getElementById('scanBtn');  
-    const scanText = document.getElementById('scanText');  
-    if (!scanBtn) return;  
-  
-    const old = scanText ? scanText.textContent : '';  
-    scanBtn.disabled = true;  
-    if (scanText) scanText.textContent = 'Đang quét…';  
-  
-    try {  
-      const data = await callAction({  
-        action: 'scan_now',  
-        window: getWindowMinutes()  
-      });  
-      alert(`Đã quét: ${data.scanned}\nVượt ngưỡng: ${data.high_risk}\nĐã trả lời: ${data.replied}\nĐã ẩn: ${data.hidden}`);  
-      location.reload();  
-    } catch (e) {  
-      alert('Lỗi quét: ' + e.message);  
-      scanBtn.disabled = false;  
-      if (scanText) scanText.textContent = old;  
-    }  
-  }  
+async function handleFullScan() {    
+    const scanBtn = document.getElementById('scanBtn');    
+    const scanText = document.getElementById('scanText');    
+    if (!scanBtn) return;    
+    
+    const old = scanText ? scanText.textContent : '';    
+    scanBtn.disabled = true;    
+    if (scanText) scanText.textContent = 'Đang quét…';    
+    
+    try {    
+      const data = await callAction({    
+        action: 'scan_now',    
+        window: getWindowMinutes()    
+      });    
+        
+      // Kiểm tra nếu server trả về lỗi  
+      if (data.error) {  
+        throw new Error(data.error);  
+      }  
+        
+      // Đảm bảo các trường tồn tại, dùng giá trị mặc định nếu thiếu  
+      const stats = {  
+        scanned: data.scanned || 0,  
+        high_risk: data.high_risk || 0,  
+        replied: data.replied || 0,  
+        hidden: data.hidden || 0  
+      };  
+        
+      alert(`Đã quét: ${stats.scanned}\nVượt ngưỡng: ${stats.high_risk}\nĐã trả lời: ${stats.replied}\nĐã ẩn: ${stats.hidden}`);    
+      location.reload();    
+    } catch (e) {    
+      alert('Lỗi quét: ' + e.message);    
+      scanBtn.disabled = false;    
+      if (scanText) scanText.textContent = old;    
+    }    
+}
 
   
   /**  

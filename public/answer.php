@@ -187,8 +187,8 @@ try {
                 ['role' => 'user',   'content' => $tpl['user']],
             ],
             'text' => ['format' => ['type' => 'text']],
-            'temperature' => (float)envv('LLM_TEMPERATURE', 0.3),
-            'top_p'       => (float)envv('LLM_TOP_P', 0.4),
+            'temperature' => (float)envv('LLM_TEMPERATURE', 0.5),
+            'top_p'       => (float)envv('LLM_TOP_P', 0.6),
         ]);
 
         $answer = _extract_text_from_response($resp) ?? '';
@@ -210,6 +210,13 @@ try {
     if ($answer === '') {
         $answer = implode("\n\n", array_slice($contexts, 0, 2));
     }
+
+    // Tự nhiên hóa câu trả lời  
+    $answer = str_replace('Theo thông báo từ Phòng Đào tạo IUH,', 'Chào bạn,', $answer);
+    $answer = str_replace('sinh viên cần', 'bạn cần', $answer);
+    $answer = str_replace('sinh viên nên', 'bạn nên', $answer);
+    $answer = preg_replace('/(\d{1,2})\s*giờ\s*(\d{2})/', '$1:$2', $answer); // 06 giờ 00 -> 6:00  
+    $answer = preg_replace('/ngày\s+(\d{1,2})\s*tháng\s+(\d{1,2})\s*năm\s*(\d{4})/', 'ngày $1/$2/$3', $answer);
 
     /* Trả về JSON */
     echo json_encode([

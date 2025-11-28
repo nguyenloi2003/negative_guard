@@ -238,9 +238,9 @@ try {
     <main style="max-width:1100px;margin:24px auto;padding:0 16px">
         <form onsubmit="return uploadPDF(event)">
             <input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token()) ?>">
-            <input type="hidden" name="action" value="scan_pdf">
-            <input type="file" name="pdf_file" accept=".pdf" required>
-            <button type="submit">Quét PDF</button>
+            <input type="hidden" name="action" value="scan_document">
+            <input type="file" name="document_file" accept=".pdf,.docx,.doc" required>
+            <button type="submit">Quét tài liệu</button>
         </form>
     </main>
 

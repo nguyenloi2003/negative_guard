@@ -132,11 +132,11 @@ function kb_answer_fee(PDO $pdo, string $q, array $opts = []): ?array
 {
     $norm = vi_norm($q);
 
-    // 1. Nhận diện ý định
+    // 1. Nhận diện ý định  
     $intent = preg_match('/(l[ệe]\s*ph[íi]|ph[íi]\s*(thi|xét|đăng\s*ký|học|sát\s*hạch|xét\s*tuyển)|học\s*ph[íi])/iu', $norm);
     if (!$intent) return null;
 
-    // 2. Truy xuất dữ liệu IUH
+    // 2. Truy xuất dữ liệu IUH  
     $hits = kb_search_chunks_v2($pdo, $q, 15, [
         'source'    => 'IUHDemo',
         'trust_min' => (float)($opts['trust_min'] ?? 0.75),
@@ -144,7 +144,7 @@ function kb_answer_fee(PDO $pdo, string $q, array $opts = []): ?array
     ]);
     if (!$hits) return null;
 
-    // 3. Gom nội dung theo post
+    // 3. Gom nội dung theo post  
     $byPost = [];
     foreach ($hits as $h) {
         $pid = (int)$h['post_id'];
@@ -152,25 +152,36 @@ function kb_answer_fee(PDO $pdo, string $q, array $opts = []): ?array
         $byPost[$pid]['text'] .= "\n" . ($h['text_clean'] ?? $h['text'] ?? '');
     }
 
-    // 4. Biểu thức bắt các mẫu “phí / miễn phí / đồng”
-    $rx = '/(?:(l[ệe]\s*ph[íi]|ph[íi]|học\s*ph[íi]).{0,100}?)?'
-        . '(?P<amount>\d{1,3}(?:[.,]?\d{3})*(?:\s*(?:đ|đồng)))'
-        . '|(?P<free>miễn\s*ph[íi])/isu';
+    // 4. Regex cải tiến - chỉ match các mẫu tiền tệ thực tế  
+    $rx = '/(?:(l[ệe]\s*ph[íi]|ph[íi]|học\s*ph[íi]).{0,50}?)?  
+        (?:khoảng\s*)?  
+        (?P<amount>\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,3})?(?:\s*(?:đ|đồng|vnđ)))  
+        |(?P<free>miễn\s*ph[íi])/isu';
 
     foreach ($byPost as $item) {
         $txt = $item['text'];
         $matches = [];
         if (preg_match_all($rx, $txt, $matches, PREG_SET_ORDER)) {
-            // Ưu tiên “miễn phí”, sau đó “số tiền nhỏ nhất”
             $amounts = [];
             $isFree = false;
+
             foreach ($matches as $m) {
                 if (!empty($m['free'])) {
                     $isFree = true;
                     break;
                 }
                 if (!empty($m['amount'])) {
-                    $amounts[] = trim($m['amount']);
+                    // Validation chặt chẽ hơn  
+                    $cleanAmount = preg_replace('/[^\d.]/', '', str_replace(',', '.', $m['amount']));
+                    $numVal = (float)$cleanAmount;
+
+                    // Chỉ chấp nhận số có vẻ như tiền tệ thực tế  
+                    // - Tối thiểu 1,000 đồng (1k)  
+                    // - Tối đa 100 triệu đồng  
+                    // - Không phải năm (1900-2100)  
+                    if ($numVal >= 1000 && $numVal <= 100000000 && !($numVal >= 1900 && $numVal <= 2100)) {
+                        $amounts[] = trim($m['amount']);
+                    }
                 }
             }
 
@@ -181,7 +192,7 @@ function kb_answer_fee(PDO $pdo, string $q, array $opts = []): ?array
             if ($isFree) {
                 $answer = "Theo thông báo của IUH, **kỳ thi hoặc hoạt động này được miễn phí** (sinh viên không phải đóng lệ phí).";
             } elseif ($amounts) {
-                // Lấy giá trị nhỏ nhất trong các số tiền
+                // Lấy giá trị nhỏ nhất trong các số tiền hợp lệ  
                 $min = min(array_map(fn($v) => (float)preg_replace('/[^\d.]/', '', str_replace(',', '.', $v)), $amounts));
                 $display = number_format($min, 0, ',', '.') . ' đồng';
                 $answer = "Theo thông báo của IUH, **lệ phí / học phí liên quan là khoảng {$display}**.";

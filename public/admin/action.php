@@ -22,6 +22,9 @@ ini_set('max_input_time', 300);
 
 error_reporting(E_ALL & ~E_WARNING & ~E_NOTICE);
 
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+
 // Chỉ gửi headers & bắt đăng nhập khi chạy qua web
 if (!$isCli) {
     send_security_headers();
@@ -74,7 +77,7 @@ function aa_upsert(string $objectId, string $objectType, string $action, int $ri
 
 $action = $_POST['action'] ?? '';
 
-ob_start(); // Bắt đầu buffer  
+// ob_start(); // Bắt đầu buffer  
 
 try {
     switch ($action) {
@@ -82,6 +85,12 @@ try {
                 $msg = trim($_POST['message'] ?? '');
                 if ($msg === '') throw new Exception('Thiếu nội dung');
                 $res = fb_publish_post($msg);
+
+                // Đảm bảo response là array hợp lệ  
+                if (!$res || !is_array($res)) {
+                    $res = ['id' => 'unknown', 'success' => true];
+                }
+
                 echo json_encode($res, JSON_UNESCAPED_UNICODE);
                 break;
             }
@@ -303,7 +312,7 @@ try {
                         if ($doReply) {
                             try {
                                 fb_comment($cid, $reply);
-                                aa_upsert($cid, 'comment', 'replied', $risk, 'scan_now', $reply);
+                                aa_upsert($cid, 'comment', 'replied', 0, 'scan_now', $reply);
                                 $scanRes['replied']++;
                                 usleep(3500000); // 3.5s
                             } catch (Throwable $eAct) {
@@ -319,7 +328,7 @@ try {
                         if ($doHide) {
                             try {
                                 fb_hide_comment($cid, true);
-                                aa_upsert($cid, 'comment', 'hidden', $risk, 'scan_now');
+                                aa_upsert($cid, 'comment', 'hidden', 0, 'scan_now');
                                 $scanRes['hidden']++;
                                 usleep(3500000); // 3.5s
                             } catch (Throwable $eAct) {
@@ -509,24 +518,179 @@ try {
             echo json_encode(['ok' => true]);
             break;
 
-        case 'scan_pdf':
+
+        case 'scan_document':
+            if (ob_get_level()) ob_clean();
+
             try {
-                error_log("PDF scan started: " . $_FILES['pdf_file']['name']);
+                // Validate upload  
+                if (!isset($_FILES['document_file'])) {
+                    throw new Exception('Không tìm thấy file upload');
+                }
 
-                $text = kb_parse_pdf($tmpPath);
-                error_log("PDF text extracted, length: " . strlen($text));
+                if ($_FILES['document_file']['error'] !== UPLOAD_ERR_OK) {
+                    throw new Exception('Lỗi upload file');
+                }
 
-                // ... rest of logic  
+                $tmpPath = $_FILES['document_file']['tmp_name'];
+                $filename = $_FILES['document_file']['name'];
+                $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
 
-                $json = json_encode($result, JSON_UNESCAPED_UNICODE);
-                error_log("JSON response length: " . strlen($json));
-                echo $json;
+                if (!is_uploaded_file($tmpPath)) {
+                    throw new Exception('File không hợp lệ');
+                }
+
+                // Parse theo định dạng  
+                if ($ext === 'pdf') {
+                    $text = kb_parse_pdf($tmpPath);
+                } elseif ($ext === 'docx') {
+                    $text = kb_parse_docx($tmpPath);
+                } elseif ($ext === 'doc') {
+                    throw new Exception('File .doc cũ không được hỗ trợ. Vui lòng dùng .docx');
+                } else {
+                    throw new Exception('Định dạng file không được hỗ trợ');
+                }
+
+                if (trim($text) === '') {
+                    throw new Exception('Không thể trích xuất text từ file');
+                }
+
+                // Ingest vào KB (giữ nguyên logic hiện có)  
+                require_once __DIR__ . '/../../lib/text_utils.php';
+
+                $pdo = db();
+                $sourceId = kb_ensure_source($pdo, 'IUHDemo', 'web', 1.0);
+
+                $clean = tu_clean_text($text);
+                $topic = tu_guess_topic($clean) ?? null;
+                $dtype = tu_guess_doc_type($clean) ?? null;
+                $md5 = md5($clean);
+                $ctime = date('Y-m-d H:i:s');
+
+                // Check duplicates  
+                $sel = $pdo->prepare("SELECT id FROM kb_posts WHERE md5=? LIMIT 1");
+                $sel->execute([$md5]);
+                $existId = (int)$sel->fetchColumn();
+
+                if ($existId) {
+                    $result = [
+                        'success' => true,
+                        'filename' => $filename,
+                        'text_length' => strlen($text),
+                        'chunks_created' => 0,
+                        'message' => 'Tài liệu đã tồn tại trong kho tri thức'
+                    ];
+                } else {
+                    $postId = kb_upsert_post($pdo, $sourceId, [
+                        'title' => $filename,
+                        'raw' => $text,
+                        'clean' => $clean,
+                        'topic' => $topic,
+                        'doc_type' => $dtype,
+                        'url' => null,
+                        'created_time' => $ctime,
+                        'updated_time' => $ctime,
+                        'trust' => 1.0,
+                        'md5' => $md5,
+                    ]);
+
+                    $chunks = tu_chunk_text($clean, 1800, 200);
+                    kb_insert_chunks($pdo, $postId, $chunks, 1.0);
+
+                    $result = [
+                        'success' => true,
+                        'filename' => $filename,
+                        'text_length' => strlen($text),
+                        'chunks_created' => count($chunks)
+                    ];
+                }
+
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode($result, JSON_UNESCAPED_UNICODE);
             } catch (Throwable $e) {
-                error_log("PDF scan error: " . $e->getMessage());
+                error_log("Document scan error: " . $e->getMessage());
                 http_response_code(400);
+                header('Content-Type: application/json; charset=utf-8');
                 echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
             }
-            break;
+            exit;
+
+        case 'sync_fb_to_kb': {
+                require_once __DIR__ . '/../../lib/kb_ingest.php';
+
+                $sinceArg = $_POST['since'] ?? '30d';
+                $limit = (int)($_POST['limit'] ?? 200);
+
+                // Parse since argument  
+                $mult = ['m' => 60, 'h' => 3600, 'd' => 86400];
+                $unit = substr($sinceArg, -1);
+                $num = (int)substr($sinceArg, 0, -1);
+                $since = time() - $num * ($mult[$unit] ?? 86400);
+
+                $pdo = db();
+                $pageId = envv('FB_PAGE_ID');
+                if (!$pageId) {
+                    throw new Exception('Missing FB_PAGE_ID in .env');
+                }
+
+                $fields = 'id,message,created_time,updated_time,permalink_url';
+                $collected = [];
+                $after = null;
+
+                try {
+                    while (count($collected) < $limit) {
+                        $batch = min(100, $limit - count($collected));
+                        $params = ['since' => $since, 'limit' => $batch, 'fields' => $fields];
+                        if ($after) $params['after'] = $after;
+
+                        $resp = fb_api("/{$pageId}/posts", $params);
+
+                        if (isset($resp['error'])) {
+                            if (strpos(json_encode($resp['error']), '"code":190') !== false) {
+                                throw new Exception('Token hết hạn/không hợp lệ');
+                            }
+                            throw new Exception(json_encode($resp['error'], JSON_UNESCAPED_UNICODE));
+                        }
+
+                        $data = $resp['data'] ?? [];
+                        if (!$data) break;
+
+                        foreach ($data as $row) {
+                            $collected[] = $row;
+                            if (count($collected) >= $limit) break;
+                        }
+
+                        $after = $resp['paging']['cursors']['after'] ?? null;
+                        if (!$after) break;
+                    }
+                } catch (Throwable $e) {
+                    throw new Exception('Graph error: ' . $e->getMessage());
+                }
+
+                $ok = 0;
+                $skip = 0;
+                foreach ($collected as $p) {
+                    try {
+                        $full = fb_api('/' . $p['id'], ['fields' => $fields]);
+                        $id = kb_upsert_post_from_fb($pdo, $full);
+                        if ($id) {
+                            $ok++;
+                        } else {
+                            $skip++;
+                        }
+                    } catch (Throwable $e) {
+                        $skip++;
+                    }
+                }
+
+                echo json_encode([
+                    'ok' => true,
+                    'fetched' => count($collected),
+                    'inserted' => $ok,
+                    'skipped' => $skip
+                ], JSON_UNESCAPED_UNICODE);
+                break;
+            }
 
 
         default:
@@ -538,4 +702,4 @@ try {
 }
 
 // Clean buffer trước khi output  
-ob_end_clean();
+// ob_end_clean();

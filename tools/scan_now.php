@@ -48,7 +48,7 @@ if ($DEBUG) {
     $sinceStr = $noTimeFilter ? 'NO_TIME_FILTER' : gmdate('c', $sinceUnix);
     fwrite(STDERR, "PAGE_ID={$pageId}, window={$window}m, since={$sinceStr}\n");
     fwrite(STDERR, "CFG: doReply=" . ($doReply ? 'true' : 'false') . ", doHide=" . ($doHide ? 'true' : 'false') . ", threshold={$threshold}\n");
-} 
+}
 
 try {
     // 1) Lấy 25 post mới nhất (không lọc)
@@ -192,3 +192,9 @@ foreach ($posts as $p) {
 }
 
 echo json_encode($out, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . PHP_EOL;
+
+if ($out['scanned'] > 0) {
+    echo "Triggering KB sync...\n";
+    $syncCmd = 'php ' . __DIR__ . '/sync_fb_to_kb.php --since=1d --limit=50';
+    passthru($syncCmd);
+}

@@ -282,6 +282,35 @@ try {
             </form>
         </div>
 
+        <!-- Sync Facebook to Knowledge Base -->
+        <!-- <div class="section-card">
+            <h2>📚 Đồng bộ Facebook vào Knowledge Base</h2>
+            <form method="post" action="/admin/action.php" onsubmit="return syncFbToKb(event)">
+                <input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token()) ?>">
+                <input type="hidden" name="action" value="sync_fb_to_kb">
+
+                <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
+                    <label>
+                        Khoảng thời gian:
+                        <select name="since">
+                            <option value="1d">1 ngày</option>
+                            <option value="7d">7 ngày</option>
+                            <option value="30d" selected>30 ngày</option>
+                        </select>
+                    </label>
+
+                    <label>
+                        Giới hạn:
+                        <input type="number" name="limit" value="200" min="1" max="500" style="width: 80px;">
+                    </label>
+                </div>
+
+                <button type="submit" class="btn btn-primary" id="syncFbBtn">
+                    <span id="syncFbText">Đồng bộ bài viết Facebook</span>
+                </button>
+            </form>
+        </div> -->
+
         <!-- Danh sách bài viết -->
         <h2>📝 Bài viết gần đây</h2>
         <?php foreach ($posts as $p): ?>
@@ -411,7 +440,9 @@ try {
                     method: 'POST',
                     body: fd
                 });
-                const data = await res.json();
+                const text = await res.text(); // Thay vì res.json() trực tiếp  
+                console.log('Raw response:', text);
+                const data = JSON.parse(text);
 
                 if (data.error) {
                     alert('Lỗi: ' + data.error);
@@ -458,6 +489,43 @@ try {
             const data = await res.json();
             if (data.error) alert('Lỗi: ' + data.error);
             else alert(hide ? 'Đã ẩn' : 'Đã hiện');
+        }
+    </script>
+
+    <script>
+        async function syncFbToKb(event) {
+            event.preventDefault(); // Quan trọng: chặn form submit  
+            event.stopPropagation();
+
+            const form = event.target;
+            const btn = document.getElementById('syncFbBtn');
+            const btnText = document.getElementById('syncFbText');
+
+            const oldText = btnText.textContent;
+            btn.disabled = true;
+            btnText.textContent = 'Đang đồng bộ...';
+
+            try {
+                const fd = new FormData(form);
+                const res = await fetch('/admin/action.php', {
+                    method: 'POST',
+                    body: fd
+                });
+                const data = await res.json();
+
+                if (data.error) {
+                    alert('Lỗi: ' + data.error);
+                } else {
+                    alert(`Hoàn thành!\nĐã lấy: ${data.fetched} bài\nĐã lưu: ${data.inserted} bài\nBỏ qua: ${data.skipped} bài`);
+                }
+            } catch (err) {
+                alert('Lỗi kết nối: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btnText.textContent = oldText;
+            }
+
+            return false; // Quan trọng: ngăn form submit  
         }
     </script>
 
