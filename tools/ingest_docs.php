@@ -99,15 +99,15 @@ foreach ($rii as $f) {
         $ctime = date('Y-m-d H:i:s', @filemtime($path) ?: time());
 
         // Kiểm tra tồn tại theo md5
-        // $sel = $pdo->prepare("SELECT id FROM kb_posts WHERE md5=? LIMIT 1");
-        // $sel->execute([$md5]);
-        // $existId = (int)$sel->fetchColumn();
+        $sel = $pdo->prepare("SELECT id FROM kb_posts WHERE md5=? LIMIT 1");
+        $sel->execute([$md5]);
+        $existId = (int)$sel->fetchColumn();
 
-        // if ($existId && !$opts['force']) {
-        //     echo "   = existed (skip chunks)\n";
-        //     $exist++;
-        //     continue;
-        // }
+        if ($existId && !$opts['force']) {
+            echo "   = existed (skip chunks)\n";
+            $exist++;
+            continue;
+        }
 
         // Nếu --force và đã tồn tại: xoá chunk để nạp lại
         if ($existId && $opts['force']) {
